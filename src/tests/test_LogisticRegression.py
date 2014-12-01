@@ -29,13 +29,15 @@ def load_data(dataset):
     data_dir, data_file = os.path.split(dataset)
     if data_dir == "" and not os.path.isfile(dataset):
         # Check if dataset is in the data directory.
-        new_path = os.path.join(
+        datadir = os.path.join(
             os.path.split(__file__)[0],
             "..",
             "..",
-            "data",
-            dataset
+            "data"
         )
+        if not os.path.isdir(datadir):
+            os.mkdir(datadir)
+        new_path = os.path.join(datadir, dataset)
         if os.path.isfile(new_path) or data_file == 'mnist.pkl.gz':
             dataset = new_path
 

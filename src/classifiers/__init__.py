@@ -1,3 +1,2 @@
 from LogisticRegression import LogisticRegression
-from MultiLayerPerceptron import MLP, HiddenLayer
-from LeNet import LeNetConvPoolLayer
+from MultiLayerPerceptron import HiddenLayer

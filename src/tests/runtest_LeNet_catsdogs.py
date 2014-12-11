@@ -299,12 +299,12 @@ def evaluate_net(learning_rate=0.03, n_epochs=200,
         rng,
         input=layer2_input,
         n_in=nkerns[2] * 6 * 6,
-        n_out=500,
+        n_out=300,
         activation=T.tanh
     )
 
     # classify the values of the fully-connected sigmoidal layer
-    layer3 = LogisticRegression(input=layer2.output, n_in=500, n_out=2)
+    layer3 = LogisticRegression(input=layer2.output, n_in=300, n_out=2)
 
     # the cost we minimize during training is the NLL of the model
     cost = layer3.negative_log_likelihood(y)

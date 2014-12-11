@@ -8,10 +8,11 @@ import numpy
 import theano
 import theano.tensor as T
 from nnet.Layer import Layer
+from nnet.SubsamplingLayer import SubsamplingLayer
 
 # start-snippet-1
 class HiddenLayer(Layer):
-    def __init__(self, rng, n_in, n_out, W=None, b=None,
+    def __init__(self, rng, n_out, W=None, b=None,
                  activation=T.tanh):
         """
         Typical hidden layer of a MLP: units are fully-connected and have
@@ -28,9 +29,6 @@ class HiddenLayer(Layer):
         :type input: theano.tensor.dmatrix
         :param input: a symbolic tensor of shape (n_examples, n_in)
 
-        :type n_in: int
-        :param n_in: dimensionality of input
-
         :type n_out: int
         :param n_out: number of hidden units
 
@@ -38,45 +36,53 @@ class HiddenLayer(Layer):
         :param activation: Non linearity to be applied in the hidden
                            layer
         """
-        # end-snippet-1
+        self.rng = rng
+        self.n_out = n_out
+        self.W = W
+        self.b = b
+        self.activation = activation
+        
+    def build(self):    
+        n_in = self.previous.num_outputs
 
-        # `W` is initialized with `W_values` which is uniformely sampled
-        # from sqrt(-6./(n_in+n_hidden)) and sqrt(6./(n_in+n_hidden))
-        # for tanh activation function
-        # the output of uniform if converted using asarray to dtype
-        # theano.config.floatX so that the code is runable on GPU
-        # Note : optimal initialization of weights is dependent on the
-        #        activation function used (among other things).
-        #        For example, results presented in [Xavier10] suggest that you
-        #        should use 4 times larger initial weights for sigmoid
-        #        compared to tanh
-        #        We have no info for other function, so we use the same as
-        #        tanh.
-        if W is None:
+        if self.W is None:
             W_values = numpy.asarray(
-                rng.uniform(
-                    low=-numpy.sqrt(6. / (n_in + n_out)),
-                    high=numpy.sqrt(6. / (n_in + n_out)),
-                    size=(n_in, n_out)
+                self.rng.uniform(
+                    low=-numpy.sqrt(6. / (n_in + self.n_out)),
+                    high=numpy.sqrt(6. / (n_in + self.n_out)),
+                    size=(n_in, self.n_out)
                 ),
                 dtype=theano.config.floatX  # @UndefinedVariable
             )
-            if activation == theano.tensor.nnet.sigmoid:
+            
+            if self.activation == theano.tensor.nnet.sigmoid:
                 W_values *= 4
 
-            W = theano.shared(value=W_values, name='W', borrow=True)
+            self.W = theano.shared(value=W_values, name='W', borrow=True)
 
-        if b is None:
-            b_values = numpy.zeros((n_out,), dtype=theano.config.floatX)  # @UndefinedVariable
-            b = theano.shared(value=b_values, name='b', borrow=True)
+        if self.b is None:
+            b_values = numpy.zeros((self.n_out,), dtype=theano.config.floatX)  # @UndefinedVariable
+            self.b = theano.shared(value=b_values, name='b', borrow=True)
 
-        self.W = W
-        self.b = b
-
-        lin_output = T.dot(input, self.W) + self.b
+        #convert input into a flat representation 
+        #(no more depth in feature maps, or 2d images - just a
+        # 1 d layer of regular neurons
+        if isinstance(self.previous, SubsamplingLayer):
+            self.input = self.input.flatten(2)
+            
+        lin_output = T.dot(self.input, self.W) + self.b
+        
         self.output = (
-            lin_output if activation is None
-            else activation(lin_output)
+            lin_output if self.activation is None
+            else self.activation(lin_output)
         )
+        
+        self.num_outputs = self.n_out
+        
+        if self.previous == None:
+            self.num_output_featuremaps = 1
+        else:
+            self.num_output_featuremaps = self.previous.num_output_featuremaps
+
         # parameters of the model
         self.params = [self.W, self.b]

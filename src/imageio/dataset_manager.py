@@ -17,7 +17,7 @@ class DatasetManager(object):
     classdocs
     '''
 
-    def __init__(self, params, location="../../serialized_datasets"):
+    def __init__(self, location="../../serialized_datasets"):
         '''
         Constructor
         '''

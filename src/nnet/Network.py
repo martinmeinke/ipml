@@ -15,6 +15,7 @@ import time
 from random import randrange
 from imageio.helpers import plot_qimage_grayscale
 import matplotlib.pyplot as plt
+from imageio import DatasetManager
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ class Network(object):
 
 class Trainer(object):
     
+    dataset_manager = DatasetManager("../../serialized_datasets")
     datasets = None
     
     # allocate symbolic variables for the data
@@ -87,8 +89,8 @@ class Trainer(object):
     n_valid_samples = 0
     n_test_samples = 0
     
-    batch_size = 50
-    learning_rate = 0.01
+    batch_size = 250
+    learning_rate = 0.03
     n_epochs = 200
     
     test_model = None
@@ -101,7 +103,7 @@ class Trainer(object):
     patience = 10000                # look as this many examples regardless
     patience_increase = 2           # wait this much longer when a new best is found
     improvement_threshold = 0.995   # a relative improvement of this much is considered significant
-    validation_frequency = 100      # validate set every x minibatches
+    validation_frequency = 1        # validate set every x minibatches
     
     best_validation_loss = numpy.inf
     best_iter = 0
@@ -284,24 +286,33 @@ class Trainer(object):
         assert self.n_train_batches > 0 and self.n_valid_batches > 0 and self.n_test_batches > 0
      
         self.index = T.lscalar()  # index to a [mini]batch
-        
+      
     def prepare_data(self, dataset, partitioning):
       
-        print('creating datasets...')
-        sets = create_samples(dataset, partitioning)
-         
-        #train_set[1].shape  (150,)
-        #train_set[0].shape  (150,128,128,3)
-        print('done')
-         
-        for i in range(len(sets)):
-            #grayscale images
-            sets[i] = (map(rgb2gray, sets[i][0]), sets[i][1])
-            sets[i] = (numpy.asarray(sets[i][0]), sets[i][1])
+        if self.dataset_manager.dataset_available(dataset):
+            print('loading datasets...')
+            sets = self.dataset_manager.load(dataset)
+        else:
+            print('creating datasets...')
+            sets = create_samples(dataset, partitioning)
              
-            #=> need to create a flat representation of the image
-            sets[i] = (numpy.reshape(sets[i][0].astype(numpy.float32) / 255, (sets[i][0].shape[0],128*128)), sets[i][1]);
+            #train_set[1].shape  (150,)
+            #train_set[0].shape  (150,128,128,3)
+            print('done')
              
+            for i in range(len(sets)):
+                #grayscale images
+                sets[i] = (numpy.asarray(map(rgb2gray, sets[i][0])), sets[i][1])
+                
+                #sets[i] = (map(rgb2gray, sets[i][0]), sets[i][1])
+                #sets[i] = (numpy.asarray(sets[i][0]), sets[i][1])
+                 
+                #=> need to create a flat representation of the image
+                reshape_dims = (sets[i][0].shape[0],128*128)
+                sets[i] = (numpy.reshape(sets[i][0].astype(numpy.float32) / 255, reshape_dims), sets[i][1]);
+            
+            self.dataset_manager.store(sets, dataset)
+            
         train_set, valid_set, test_set = sets
      
         if logger.getEffectiveLevel() is logging.DEBUG:

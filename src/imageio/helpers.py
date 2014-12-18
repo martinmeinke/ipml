@@ -97,6 +97,10 @@ def isdog(filename):
 def rgb2gray(rgb):
     return numpy.dot(rgb[...,:3], [0.299, 0.587, 0.144])
 
+def convert_image_representation(image):
+    x = open_image(image)
+    return (numpy.array(x[0]), isdog(x[1]))
+
 def create_samples(image_path, partitiondef = (6,2,2)):
     """ creates an arbitrary amount of sample sets
     the number of sets is defined by the number of elements in the
@@ -110,11 +114,12 @@ def create_samples(image_path, partitiondef = (6,2,2)):
     """
     #this fails on large images! (not enough ram)
     filenames = os.listdir(image_path)
-    images = map(lambda x: open_image(image_path+'/'+x), filenames)     #[(img, path), (img, path)]
-    classes = map(lambda x: (x[0], isdog(x[1])),images)                 #[(img, 1), (img, 0)]
-    numpyarrays = map(lambda x: (numpy.array(x[0]), x[1]),classes)      #[(arr, 1), (arr, 0)]
-    samples = randomly_partition(numpyarrays, partitiondef)
-
+    images = map(lambda x: convert_image_representation(image_path+'/'+x), filenames)
+    #images = map(lambda x: open_image(image_path+'/'+x), filenames)     #[(img, path), (img, path)]
+    #images = map(lambda x: (x[0], isdog(x[1])),images)                  #[(img, 1), (img, 0)]
+    #images = map(lambda x: (numpy.array(x[0]), x[1]), images)           #[(arr, 1), (arr, 0)]
+    samples = randomly_partition(images, partitiondef)
+    
     #make tuple for each set
     sets = []
     for tset in samples: #for each set

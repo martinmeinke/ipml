@@ -37,7 +37,7 @@ class RFTest(unittest.TestCase):
                 count += 1
         return count / float(size)
 
-    def testRF(self, tree_count = 100):
+    def testRF(self, tree_count = 50):
         #Training 
         forest = RandomForest(tree_count, self.trainFeatures, self.trainLabels, True)
         predictions = forest.predict(self.trainFeatures)

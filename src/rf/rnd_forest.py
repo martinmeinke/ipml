@@ -4,13 +4,16 @@ from rnd_tree import RandomTree
 
 class RandomForest(object):
     forest = None
+    #TODO:optimize, not a fix number for subset, orig 100    
+    #SAMPLE_SUBSET_SIZE = 1500
+    SAMPLE_SUBSET_SIZE = 100
     
     def __init__(self, num_trees, training_features, training_labels, verbose = False):
         self.num_trees = num_trees
         self.forest = []
         self.verbose = verbose
-        train_data = self.createMapping(training_features, training_labels)
-        self.generateForest(train_data)
+        train_data = self.create_mapping(training_features, training_labels)
+        self.generate_forest(train_data)
     
     
     def predict(self, features):
@@ -35,9 +38,9 @@ class RandomForest(object):
         return sortedCounts[0][0]
 
 
-    def generateForest(self, data):
+    def generate_forest(self, data):
         for i in xrange(self.num_trees):
-            data_subset = self.dictSubsample(data, 100)
+            data_subset = self.dict_subsample(data, self.SAMPLE_SUBSET_SIZE)
             attributes = [j for j in xrange(len(data.items()[0][0]))]
             self.forest.append(RandomTree(data_subset, attributes))
             if self.verbose:
@@ -48,7 +51,7 @@ class RandomForest(object):
     """
     Returns a random subset of each data set in ARGS of size SUB_SIZE with replacement
     """    
-    def dictSubsample(self, data, sub_size):
+    def dict_subsample(self, data, sub_size):
         data_size = len(data)
         subset = {}
     
@@ -58,15 +61,15 @@ class RandomForest(object):
     
         return subset
     
-    def createMapping(self, keys, values):
+    def create_mapping(self, features, labels):
         """
-        Returns a dictionary of keys : values
+        Returns a dictionary of keys(features) : values(labels)
         """
         result = {}
-        if len(keys) != len (values):
-            raise Exception("Keys and values length do not match")
-        for i in xrange(len(keys)):
-            result[tuple(keys[i])] = values[i]
+        if len(features) != len (labels):
+            raise Exception("Keys and labels length do not match")
+        for i in xrange(len(features)):
+            result[tuple(features[i])] = labels[i]
         return result
 
         

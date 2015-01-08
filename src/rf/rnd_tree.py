@@ -4,24 +4,32 @@ import operator
 
 class RandomTree(object):
     MIN_GAIN = 10e-5
+    #TODO:optimize, size of feature subset orig 8
+    #NUM_ATTRIBUTES = 20
+    NUM_ATTRIBUTES = 8
+    #TODO:optimize, threshold steps orig 10 
+    #NUM_THRES_STEPS = 40
+    NUM_THRES_STEPS = 10
+    
+    #maximum tries for testing different attribute sets to find best split
+    MAX_TRIES = 10
     
     root_node = None
     
     def __init__(self, data, attributes):
-        self.root_node = self.generateTree(data, attributes)
+        self.root_node = self.generate_tree(data, attributes)
 
-
-    def generateTree(self, data, attributes):
-        """
-        Returns a randomized decision tree
-        """
-        defaultValue = self.getMajority(data)
+    '''
+    generates a rondomized decision tree
+    '''
+    def generate_tree(self, data, attributes):
+        default_val = self.get_majority_class(data)
     
         #Base cases:
         #No more data, take the majority
         if len(data) < 2:
             root = DecisionTreeNode()
-            root.setLabel(defaultValue)
+            root.set_label(default_val)
             return root
     
         #All data points have same label
@@ -32,60 +40,67 @@ class RandomTree(object):
                 sameValues = False
         if sameValues:
             root = DecisionTreeNode()
-            root.setLabel(firstValue)
+            root.set_label(firstValue)
             return root
     
-        #Greedily decide best feature to split on
-        attributes = self.listIndexSubSample(attributes, 8)
-    
+        #decide best feature to split on
+        
+        attributes = self.list_index_sub_sample(attributes, self.NUM_ATTRIBUTES)
         best_gain = -1
         best_threshold = -1
-        for attribute in attributes:
-            for threshold in self.getThresholds(self.findMax(data,attribute), 10):
-                gain = self.informationGain(data, attribute, threshold)
-                if gain > best_gain:
-                    best_gain = gain
-                    best_attribute = attribute
-                    best_threshold = threshold
-    
-        if best_gain < self.MIN_GAIN:
-            root = DecisionTreeNode()
-            root.setLabel(defaultValue)
-            return root
+        
+        for i in range(self.MAX_TRIES):
+            for attribute in attributes:
+                for threshold in self.calc_thresholds(self.find_max(data,attribute), self.NUM_THRES_STEPS):
+                    gain = self.calc_inf_gain(data, attribute, threshold)
+                    if gain > best_gain:
+                        best_gain = gain
+                        best_attribute = attribute
+                        best_threshold = threshold
+            
+            #if gain sufficient break
+            if(best_gain > self.MIN_GAIN):
+                break
+            #if maximum iteration not reached try new set of attributes
+            elif best_gain < self.MIN_GAIN and i < (self.MAX_TRIES -1):
+                attributes = self.list_index_sub_sample(attributes, self.NUM_ATTRIBUTES)
+            else:
+                root = DecisionTreeNode()
+                root.set_label(default_val)
+                return root
     
         #Recursive build tree
         root = DecisionTreeNode(best_attribute, best_threshold)
-        yes_set, no_set = self.splitDataByAttribute(data, best_attribute, best_threshold)
-        yes = self.generateTree(yes_set, attributes)
-        no = self.generateTree(no_set, attributes)
-        root.setYes(yes)
-        root.setNo(no)
+        yes_set, no_set = self.split_data_by_attribute(data, best_attribute, best_threshold)
+        l_child = self.generate_tree(yes_set, attributes)
+        r_child = self.generate_tree(no_set, attributes)
+        root.set_l_child(l_child)
+        root.set_r_child(r_child)
     
         return root
     
     def decide(self, features):
         return self.root_node.decide(features)
     
-    
-    def getThresholds(self, maximum, num_steps):
+    def calc_thresholds(self, maximum, num_steps):
         step_size = maximum / float(num_steps)
         return [step_size * i for i in xrange(1, num_steps)]
     
-    def findMax(self, data, attribute):
+    def find_max(self, data, attribute):
         max_value = -1
         for elem in data.items():
             if elem[0][attribute] > max_value:
                 max_value = elem[0][attribute]
         return max_value
     
-    def informationGain(self, data, attribute, threshold):
+    def calc_inf_gain(self, data, attribute, threshold):
         size = float(len(data))
-        yes_set, no_set = self.splitDataByAttribute(data, attribute, threshold)
-        return self.entropy(data) \
-               - ((len(yes_set) / size) * self.entropy(yes_set)) \
-               - ((len(no_set) / size) * self.entropy(no_set))
+        yes_set, no_set = self.split_data_by_attribute(data, attribute, threshold)
+        return self.calc_entropy(data) \
+               - ((len(yes_set) / size) * self.calc_entropy(yes_set)) \
+               - ((len(no_set) / size) * self.calc_entropy(no_set))
     
-    def entropy(self, data):
+    def calc_entropy(self, data):
         frequencies = {}
         ent = 0.0
         values = data.values()
@@ -99,10 +114,10 @@ class RandomTree(object):
         for freq in frequencies.values():
             p = freq/float(len(values))
             ent -= p * math.log(p, 2)
-    
+            
         return ent
     
-    def getMajority(self, data):
+    def get_majority_class(self, data):
         counts = {}
         for value in data.values():
             if counts.has_key(value):
@@ -110,11 +125,9 @@ class RandomTree(object):
             else:
                 counts[value] = 1
         sortedCounts = sorted(counts.items(), key=operator.itemgetter(1), reverse=True)
-        return sortedCounts[0][0]
+        return sortedCounts[0][0]    
     
-    
-    
-    def splitDataByAttribute(self, data, attribute, threshold):
+    def split_data_by_attribute(self, data, attribute, threshold):
         yes_set, no_set = {}, {}
         for datum in data.items():
             if datum[0][attribute] > threshold:
@@ -123,41 +136,38 @@ class RandomTree(object):
                 no_set[datum[0]] = datum[1]
         return [yes_set, no_set]
     
-    
-    def listIndexSubSample(self, orig_list, sub_size):
+    def list_index_sub_sample(self, orig_list, sub_size):
         subset = []
         for _ in xrange(sub_size):
             subset.append(random.randrange(0, len(orig_list)))
         return subset
 
 class DecisionTreeNode:
-    """
-    A binary decision tree
-    """
 
     def __init__(self, feature_index=None, feature_threshold=None):
         self.feature_index = feature_index
         self.feature_threshold = feature_threshold
-        self.yes = None
-        self.no = None
+        self.left_child = None
+        self.right_child = None
         self.label = None
-        self.decisionNode = False
+        self.decision_node = False
 
-    def setYes(self, yes):
-        self.yes = yes
+    def set_l_child(self, child_node):
+        self.left_child = child_node
 
-    def setNo(self, no):
-        self.no = no
+    def set_r_child(self, child_node):
+        self.right_child = child_node
 
-    def setLabel(self, label):
+    def set_label(self, label):
         self.label = label
-        self.decisionNode = True
+        self.decision_node = True
 
     def decide(self, features):
-        if self.decisionNode:
+        if self.decision_node:
             return self.label
+        #if true left child otherwise right child
         if features[self.feature_index] > self.feature_threshold:
-            return self.yes.decide(features)
-        return self.no.decide(features)
+            return self.left_child.decide(features)
+        return self.right_child.decide(features)
 
         

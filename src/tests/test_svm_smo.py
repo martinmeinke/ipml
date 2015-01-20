@@ -24,7 +24,8 @@ class SVMSMPOTest(unittest.TestCase):
     def testRbf(self, k1=1.3):
         # actually train
         b,alphas = smoP(self.trainData, self.trainLabels, 200, 0.0001, 10000, ('rbf', k1)) #C=200 important
-        datMat=mat(self.trainData); labelMat = mat(self.trainLabels).transpose()
+        datMat=mat(self.trainData);
+        labelMat = mat(self.trainLabels).transpose()
 
         svInd=nonzero(alphas.A>0)[0]
         sVs=datMat[svInd] #get matrix of only support vectors
@@ -51,7 +52,7 @@ class SVMSMPOTest(unittest.TestCase):
             kernelEval = kernelTrans(sVs,datMat[i,:],('rbf', k1))
             predict=kernelEval.T * multiply(labelSV,alphas[svInd]) + b
             if sign(predict)!=sign(testLabels[i]): errorCount += 1
-        self.assertLess(float(errorCount)/m, 0.25, "Training error rate too high")
+        self.assertLess(float(errorCount)/m, 0.25, "Test error rate too high")
 
 if __name__ == "__main__":
     unittest.main()

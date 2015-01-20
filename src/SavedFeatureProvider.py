@@ -4,6 +4,7 @@ import logging
 
 import numpy as np
 from os import path
+from Utility import LoadPickleFile
 
 class SavedFeatureProvider(object):
     """
@@ -13,11 +14,11 @@ class SavedFeatureProvider(object):
     Each *Data member will be an m*n matrix with m data points and n features.
     The *Labels member will be an m*1 matrix with the labels corresponding to the m data points
     """
-
     DATADIR = path.join(path.dirname(path.abspath(__file__)), "../features/")
     CAT_FEATURES_FILE = path.join(DATADIR, "cat_vectors")
     DOG_FEATURES_FILE = path.join(DATADIR, "dog_vectors")
     EXTRACTOR_DATA_FILE = path.join(DATADIR, "texel_features")
+
     VALIDATION_SET_SIZE = 15 # 15 percent of the labeled data is validation data and not training data
     CAT_LABEL = 1
     DOG_LABEL = -1
@@ -27,14 +28,15 @@ class SavedFeatureProvider(object):
         self._dogfile = dogDataFile or self.DOG_FEATURES_FILE
         self._extractorfile = extractorDataFile or self.EXTRACTOR_DATA_FILE
 
-    def load(self):
+    def load(self, validationSetSize = None):
         """
         Loads the data from pickle files and initializes the important members
         """
+        valSetPortion = validationSetSize or self.VALIDATION_SET_SIZE
         logging.info("Trying to load cat features")
-        catfeatures = np.mat(self._loadPickleFile(self._catfile))
+        catfeatures = np.mat(LoadPickleFile(self._catfile))
         logging.info("Trying to load dog features")
-        dogfeatures = np.mat(self._loadPickleFile(self._dogfile))
+        dogfeatures = np.mat(LoadPickleFile(self._dogfile))
 
         # get number of features and check for validity
         self.NumFeatures = catfeatures.shape[1]
@@ -42,13 +44,13 @@ class SavedFeatureProvider(object):
             self._logAndRaise("Dog data has %d features instead of %d" % (dogfeatures.shape[1], self.NumFeatures))
 
         # Let's define TrainingData, TrainingLabels, ValidationData, ValidationLabels
-        self._arrangeDataSets(catfeatures, dogfeatures, self.VALIDATION_SET_SIZE)
+        self._arrangeDataSets(catfeatures, dogfeatures, valSetPortion)
         # no support for TestData, TestLabels yet
         self.TestData = None
         self.TestLabels = None
 
         logging.info("Trying to load extractor data")
-        self.ExtractorData = self._loadPickleFile(self._extractorfile)
+        self.ExtractorData = LoadPickleFile(self._extractorfile)
 
     def _arrangeDataSets(self, catfeatures, dogfeatures, percentValidation):
         """
@@ -77,8 +79,9 @@ class SavedFeatureProvider(object):
         Splits the feature matrix <features> into train an test data. Both resulting matrices
         will have an additional last column with the label in it. The label is defined by <label>
         """
+        # TODO: remove randomness if implemented in DataProvider and just take the first x data points for train and the others for validation
         nData = features.shape[0]
-        nValData = int(nData * (float(percentValidation) / 100))
+        nValData = int(nData * percentValidation)
         logging.info("Taking %i from %i data points for validation set" % (nValData, nData))
         # pick columns randomly for validation data and create labeled validation data matrix
         valRows = np.random.choice(nData, nValData, replace=False)
@@ -97,22 +100,9 @@ class SavedFeatureProvider(object):
         2. A label matrix with size (m1+m2)*1; each row with the label corresponding to the data rows in the first result  
         """
         joined = np.append(catfeatures, dogfeatures, axis=0) # join it
+        # TODO: don't mix if randomness is implemented in data provider
         np.random.shuffle(joined) # mix it
         return np.mat(joined[:,:-1]), np.mat(joined[:,-1]) # split data and labels
-
-
-    def _loadPickleFile(self, path):
-        """
-        Simply load data from a pickle file
-        """
-        logging.info("Attempt to load data to file '%s'", path)
-        if os.path.exists(path):
-            with open(path,'rb') as f:
-                data = pickle.load(f)
-                logging.info("Data loaded sucessfully")
-                return data
-        else:
-            self._logAndRaise("File '%s' does not exist" % path)
 
     def _logAndRaise(self, msg):
         logging.error(msg)

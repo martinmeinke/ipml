@@ -113,7 +113,7 @@ def innerL(i, oS):
     return 1
 
 def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Platt SMO
-    oS = optStruct(mat(dataMatIn),mat(classLabels).transpose(),C,toler, kTup)
+    oS = optStruct(dataMatIn,classLabels,C,toler, kTup)
     iter = 0
     entireSet = True; alphaPairsChanged = 0
     while iter < maxIter and (alphaPairsChanged > 0 or entireSet):

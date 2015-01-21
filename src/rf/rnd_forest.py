@@ -7,31 +7,18 @@ import multiprocessing
 
 class RandomForest(object):
     forest = None
-    #TODO:optimize, not a fix number for subset, orig 100    
-    #SAMPLE_SUBSET_SIZE = 1500
-    SAMPLE_SUBSET_SIZE = 100
+    f_parms = None 
     
-    MIN_GAIN = 10e-5
-    #TODO:optimize, size of feature subset orig 8
-    #NUM_ATTRIBUTES = 20
-    NUM_ATTRIBUTES = 8
-    #TODO:optimize, threshold steps orig 10 
-    #NUM_THRES_STEPS = 40
-    NUM_THRES_STEPS = 10
-    
-    #maximum tries for testing different attribute sets to find best split
-    MAX_TRIES = 10
-    
-    def __init__(self, num_trees, training_features, training_labels, verbose = False):
-        self.num_trees = num_trees
+    def __init__(self, f_params, training_features, training_labels, verbose = False):
+        self.f_parms = f_params
         self.forest = []
         self.verbose = verbose
         self.train_data = self.create_mapping(training_features, training_labels)
 
     
     def prepare_forest(self):
-        for __ in xrange(self.num_trees):
-            self.forest.append(RandomTree(self.MIN_GAIN, self.NUM_ATTRIBUTES, self.NUM_THRES_STEPS, self.MAX_TRIES))
+        for __ in xrange(self.f_parms.FOREST_SIZE):
+            self.forest.append(RandomTree(self.f_parms))
 
     def predict(self, features):
         predictions = []
@@ -59,7 +46,7 @@ class RandomForest(object):
         args = []
         self.prepare_forest()
         for tree in self.forest:
-            data_subset = self.dict_subsample(self.train_data, self.SAMPLE_SUBSET_SIZE)
+            data_subset = self.dict_subsample(self.train_data, self.f_parms.SAMPLE_SUBSET_SIZE)
             attributes = [j for j in xrange(len(self.train_data.items()[0][0]))]
             tree.build_tree(data_subset, attributes)
             i+=1
@@ -72,10 +59,10 @@ class RandomForest(object):
         cores = multiprocessing.cpu_count()
         pool = Pool(processes=cores)
         args = []
-        for __ in xrange(self.num_trees):
-            data_subset = self.dict_subsample(self.train_data, self.SAMPLE_SUBSET_SIZE)
+        for __ in xrange(self.f_parms.FOREST_SIZE):
+            data_subset = self.dict_subsample(self.train_data, self.f_parms.SAMPLE_SUBSET_SIZE)
             attributes = [j for j in xrange(len(self.train_data.items()[0][0]))]
-            args.append(((self.MIN_GAIN, self.NUM_ATTRIBUTES, self.NUM_THRES_STEPS, self.MAX_TRIES), data_subset, attributes))
+            args.append((self.f_parms, data_subset, attributes))
                             
         self.forest = pool.map(parallel_build_tree, args)
         pool.close()
@@ -91,7 +78,7 @@ class RandomForest(object):
     
         for _ in xrange(sub_size):
             sample = data.items()[random.randrange(0, data_size)]
-            subset[sample[0]] = sample[1][0]
+            subset[sample[0]] = sample[1]
     
         return subset
     

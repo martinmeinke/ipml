@@ -1,4 +1,5 @@
 from rf.rnd_forest import RandomForest
+from rf.RFClassifier import ForestParams
 from os import path
 import cProfile
 
@@ -14,9 +15,9 @@ class RFTest(unittest.TestCase):
 
     def setUp(self):
         self.trainFeatures = self.getDataFromFile(self.trainFeaturesFile)
-        self.trainLabels = self.getDataFromFile(self.trainLabelsFile)
+        self.trainLabels = self.getLabelsFromFile(self.trainLabelsFile)
         self.valFeatures = self.getDataFromFile(self.valFeatuesFile)
-        self.valLabels = self.getDataFromFile(self.valLabelsFile)
+        self.valLabels = self.getLabelsFromFile(self.valLabelsFile)
 
     def getDataFromFile(self, fileName):
         f = open(fileName)
@@ -27,6 +28,14 @@ class RFTest(unittest.TestCase):
             result.append(elem)
         return result
     
+    def getLabelsFromFile(self, fileName):
+        f = open(fileName)
+        result = []
+        
+        for line in f:
+            result.append(int(line))
+        return result
+    
     def getAccuracy(self, list1, list2):
         """
         Returns the error rate between list1 and list2
@@ -34,13 +43,14 @@ class RFTest(unittest.TestCase):
         size = len(list1)
         count = 0
         for i in xrange(size):
-            if list1[i] != list2[i][0]:
+            if list1[i] != list2[i]:
                 count += 1
         return count / float(size)
 
-    def testRF(self, tree_count = 100):
+    def testRF(self):
         #Training 
-        forest = RandomForest(tree_count, self.trainFeatures, self.trainLabels, True)
+        f_parms = ForestParams()
+        forest = RandomForest(f_parms, self.trainFeatures, self.trainLabels, True)
         #cProfile.runctx('forest.generate_forest()',globals(),locals())
         forest.parallel_generate_forest()
         predictions = forest.predict(self.trainFeatures)

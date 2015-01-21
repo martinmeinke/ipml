@@ -2,23 +2,28 @@ import math
 import random
 import operator
 
+
+def parallel_build_tree(args):
+    tree = RandomTree(args[0][0],args[0][1],args[0][2],args[0][3])
+    tree.build_tree(args[1], args[2])
+    return tree
+
+
 class RandomTree(object):
-    MIN_GAIN = 10e-5
-    #TODO:optimize, size of feature subset orig 8
-    #NUM_ATTRIBUTES = 20
-    NUM_ATTRIBUTES = 8
-    #TODO:optimize, threshold steps orig 10 
-    #NUM_THRES_STEPS = 40
-    NUM_THRES_STEPS = 10
-    
-    #maximum tries for testing different attribute sets to find best split
-    MAX_TRIES = 10
-    
     root_node = None
     
-    def __init__(self, data, attributes):
-        self.root_node = self.generate_tree(data, attributes)
+    def __init__(self, min_gain, num_attr, num_thres, max_tries):
+        self.MIN_GAIN = min_gain
+        self.NUM_ATTRIBUTES = num_attr
+        self.NUM_THRES_STEPS = num_thres
+        self.MAX_TRIES = max_tries
 
+    '''
+    wrapper to build the tree and set the root node
+    '''
+    def build_tree(self, data, attributes):
+        self.root_node = self.generate_tree(data, attributes)
+        
     '''
     generates a rondomized decision tree
     '''

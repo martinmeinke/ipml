@@ -1,5 +1,6 @@
 from rf.rnd_forest import RandomForest
 from os import path
+import cProfile
 
 import unittest
 
@@ -37,9 +38,11 @@ class RFTest(unittest.TestCase):
                 count += 1
         return count / float(size)
 
-    def testRF(self, tree_count = 50):
+    def testRF(self, tree_count = 100):
         #Training 
         forest = RandomForest(tree_count, self.trainFeatures, self.trainLabels, True)
+        #cProfile.runctx('forest.generate_forest()',globals(),locals())
+        forest.parallel_generate_forest()
         predictions = forest.predict(self.trainFeatures)
         acc = self.getAccuracy(predictions, self.trainLabels)
         print("Error rate on train set: " + str(acc * 100) + "%")

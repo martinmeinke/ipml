@@ -19,7 +19,7 @@ class SavedFeatureProvider(object):
     DOG_FEATURES_FILE = path.join(DATADIR, "dog_vectors")
     EXTRACTOR_DATA_FILE = path.join(DATADIR, "texel_features")
 
-    VALIDATION_SET_SIZE = 15 # 15 percent of the labeled data is validation data and not training data
+    VALIDATION_SET_SIZE = 0.15 # 15 percent of the labeled data is validation data and not training data
     CAT_LABEL = 1
     DOG_LABEL = -1
 

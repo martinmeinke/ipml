@@ -36,7 +36,6 @@ class DatasetManager(object):
     def store(self, dataset, datasetName):
         name = self.extract_last_component(datasetName)
         logger.info("Storing dataset: {}".format(name))
-        #logger.info(dataset)
         sPickle.s_dump(dataset, open(self.dataset_location+"/"+name, "wb" ))
     
     def load(self, datasetName):

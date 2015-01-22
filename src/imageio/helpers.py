@@ -4,7 +4,7 @@ Created on Dec 5, 2014
 @author: martin
 '''
 
-from PIL import Image
+from PIL import Image, ImageOps
 import os
 import random
 import numpy
@@ -73,7 +73,6 @@ def plot_misclassified_images(misclassified_images, test_set, max_images=36, edg
     plt.show()
     plt.figure(1)
 
-
 def plot_kernels(layers, layerids, figids):
     for layer, figid in zip(layerids, figids):
         plt.figure(figid)
@@ -106,7 +105,7 @@ def check_break():
 
 
 def set_details(s):
-    return "#samples: {}, #dogs: {}".format(len(s[1]), numpy.sum(s[1]))
+    return "#samples: {}, #dogs: {}, #bytes: {}".format(len(s[1]), numpy.sum(s[1]), s[0].nbytes+s[1].nbytes)
 
 
 def randomly_partition(seq, proportions):
@@ -129,50 +128,94 @@ def randomly_partition(seq, proportions):
     return output
 
 
-def resize_image(image, edgelength):
+def resize_image(image, edgelength, stride=-1):
+    '''
+    if stride is > 0, not only the center part is cut out
+    '''
     # creates quadratic images
     size = (edgelength, edgelength)
     width = image.size[0]
     height = image.size[1]
 
-    left = 0
-    right = width - 1
-    top = 0
-    bottom = height - 1
+    ileft = 0
+    iright = width - 1
+    itop = 0
+    ibottom = height - 1
 
     diff = abs(height - width)
-    halfdiff = diff / 2
 
-    if width > height:  # landscape
-        left = halfdiff
-        right = right - (diff - halfdiff)
-    elif height > width:  # portrait
-        top = halfdiff
-        bottom = bottom - (diff - halfdiff)
+    boxes = []
+    newimgs = []
 
-    box = (left, top, right, bottom)
-    image = image.crop(box)
+    if stride < 0:
+        halfdiff = diff / 2
 
-    image.thumbnail(size, Image.ANTIALIAS)
-    background = Image.new('RGBA', size, (255, 255, 255, 0))
-    background.paste(
-        image,
-        ((size[0] - image.size[0]) / 2, (size[1] - image.size[1]) / 2))
+        if width > height:  # landscape
+            left = halfdiff
+            right = iright - (diff - halfdiff)
+            top = itop
+            bottom = ibottom
+        elif height > width:  # portrait
+            top = halfdiff
+            bottom = ibottom - (diff - halfdiff)
+            left = ileft
+            right = iright
 
-    return background
+        box = (left, top, right, bottom)
+        boxes.append(box)
+    else:
+        positions = range(0, diff, stride)
+        print positions
+        if width > height:  # landscape
+            for p in positions:
+                left = p
+                right = iright - (diff - p)
+                top = itop
+                bottom = ibottom
+                boxes.append((left, top, right, bottom))
+
+        elif height > width:  # portrait
+            for p in positions:
+                top = p
+                bottom = ibottom - (diff - p)
+                left = ileft
+                right = iright
+                boxes.append((left, top, right, bottom))
+
+    for box in boxes:
+        print box
+        imagec = image.copy()
+        imagen = imagec.crop(box)
+        imagen.thumbnail(size, Image.ANTIALIAS)
+        background = Image.new('RGBA', size, (255, 255, 255, 0))
+        background.paste(
+            imagen,
+            ((size[0] - imagen.size[0]) / 2, (size[1] - imagen.size[1]) / 2))
+
+        newimgs.append(background)
+
+    return newimgs
 
 
 def open_image(path):
     return (Image.open(path).copy(), os.path.split(path)[1])
 
 
-def resize_images_quadratic(inpath, tgtpath, edgelen=128):
+def resize_images_quadratic(inpath, tgtpath, edgelen=128, stride=-1):
+    '''
+    if stance is > 0, not only the center part is cut out
+    '''
     filenames = os.listdir(inpath)
+
+    if not os.access(tgtpath, os.R_OK):
+        os.mkdir(tgtpath)
 
     for i in filenames:
         im = Image.open(inpath + '/' + i)
-        imResize = resize_image(im, edgelen)
-        imResize.save(tgtpath + '/' + i, 'JPEG', quality=100)
+        imResize = resize_image(im, edgelen, stride)
+        for num in range(len(imResize)):
+            sim = imResize[num]
+            sim.save(tgtpath + '/' + i.replace(".jpg", "_p{}.jpg".format(num)), 'JPEG', quality=100)
         print "Saving " + i
 
 
@@ -247,11 +290,22 @@ def plot_lr_decay():
     plt.show()
 
 
+def flip_images(inpath):
+    filenames = os.listdir(inpath)
+
+    for i in filenames:
+        im = Image.open(inpath + '/' + i)
+        mirror_img = ImageOps.mirror(im)
+        mirror_img.save(inpath + '/' + i.replace(".jpg","_mirr.jpg"), 'JPEG', quality=100)
+
+
 def main():
     # resize_images()
-    #train, cv, test = create_samples(tstpath)
-    #resize_images_quadratic("../../data/train_orig", "../../data/train_images_96_100percent", edgelen=96)
-    plot_lr_decay()
+    # train, cv, test = create_samples(tstpath)
+    resize_images_quadratic("../../data/test_patches", "../../data/train_images_96_test_enhanced", edgelen=96, stride=5)
+    flip_images("../../data/train_images_96_test_enhanced")
+
+    # plot_lr_decay()
     pass
 
 if __name__ == '__main__':

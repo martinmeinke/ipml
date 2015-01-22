@@ -35,12 +35,9 @@ class Test(unittest.TestCase):
     network = None
     trainer = None
 
-    TANH = 0
-    RELU = 1
-
     PARAMETERS = readParams("../../modelparams.json")
     MP = PARAMETERS[MODEL_NAME]
-    
+
     # HYPERPARAMETERS
 #     C1 = (50, 1, 9, 9)
 #     C2 = (80, 50, 5, 5)

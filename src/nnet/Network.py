@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from imageio import DatasetManager
 from imageio import helpers
+from numpy import int8
 
 logger = logging.getLogger(__name__)
 
@@ -462,14 +463,14 @@ class Trainer(object):
             for i in range(len(sets)):
                 # grayscale images
                 gray = map(rgb2gray, sets[i][0])
-                sets[i] = (numpy.asarray(gray), sets[i][1])
+                sets[i] = (numpy.asarray(gray), numpy.asarray(sets[i][1], int8))
 
                 flat_img_len = self.img_width * self.img_height
 
                 # need to create a flat representation of the image
                 reshape_dims = (sets[i][0].shape[0], flat_img_len)
                 sets[i] = (
-                    numpy.reshape(sets[i][0].astype(numpy.float32) / 255,
+                    numpy.reshape(sets[i][0].astype(numpy.float16) / 255,
                                   reshape_dims),
                     sets[i][1])
 

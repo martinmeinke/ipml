@@ -38,7 +38,7 @@ class SoftMax(Layer):
         self.rng = rng
         self.n_out = n_out
         self.lambda_l1 = 0.000000
-        self.lambda_l2 = 0.00005
+        self.lambda_l2 = 0.00003
 
     def build(self):
         n_in = self.previous.num_outputs

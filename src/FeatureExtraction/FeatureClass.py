@@ -7,17 +7,24 @@ import numpy as np
 import logging
 from PIL import Image
 
+import multiprocessing as mp
+
 # import files
 import helpers
 import Features
 import Vectors
 import Side_Functions
 
+def compute_features(path, features):
+    img = Image.open(path)
+    data = np.asarray(img, np.float32)
+    img.close()
+    return Vectors.compute_feature_vector(data, features)
 
 class feature_extractor(object):
     
-    def __init__(self, dataprovider, integrate_images_bit = 1, display_features_bit = 0, compute_vectors_bit = 1, load_data_bit = 0, store_data_bit = 1,load_test_bit=1):
-        #start timer, variables
+    def __init__(self, dataprovider, integrate_images_bit=1, display_features_bit=0, compute_vectors_bit=1, load_data_bit=0, store_data_bit=1, load_test_bit=1):
+        # start timer, variables
         self._dataprovider = dataprovider
         self.texel_features = []
         self.dog_vectors = []
@@ -25,8 +32,8 @@ class feature_extractor(object):
         self.feature_images = []
 
         self.distance_threshold = 100
-        self.feature_border = 5 #!!!cannot be changed!!!
-        self.partition1 = (10,0,0)
+        self.feature_border = 5  #!!!cannot be changed!!!
+        self.partition1 = (10, 0, 0)
         self.max_num_of_texels = 100
         self.max_num_of_vectors = 100
         self.filepath_texel_features = "save/texel_features"
@@ -79,7 +86,7 @@ class feature_extractor(object):
             
             logging.info('INTEGRATION DONE')
                     
-            #self.texel_features = np.asarray(self.texel_features, np.float32)
+            # self.texel_features = np.asarray(self.texel_features, np.float32)
 
     def display_data(self):
 
@@ -97,28 +104,36 @@ class feature_extractor(object):
         img.close()
         return data
 
+       
     def compute_vectors(self):
 
         if(not self.compute_vectors_bit):
             return
 
         logging.info('COMPUTING VECTORS')
-
+        
         trainset = self._dataprovider.TrainData
         trainlabels = self._dataprovider.TrainLabels
         n = len(trainset)
 
-        for i in xrange(0,n):
-            affectedVecs = self.dog_vectors if trainlabels[i] == self._dataprovider.DogLabel else self.cat_vectors
-            if len(affectedVecs) > self.max_num_of_vectors:
+        nCores = mp.cpu_count()
+        pool = mp.Pool(nCores)
+        results = []
+        numres = (0,0)
+        for i in xrange(0, n):
+            resultflag = 0 if trainlabels[i] == self._dataprovider.DogLabel else 1
+            if numres[resultflag] > self.max_num_of_vectors:
                 continue
-            img = np.asarray(self.read_img(trainset[i]), np.float32)
-            vec = Vectors.compute_feature_vector(img, self.texel_features)
-            affectedVecs.append(vec)
-            logging.info('Vector {} integrated'.format(i))
-            self.mytimer.tick()
+            results.append((pool.apply_async(compute_features, [trainset[i], self.texel_features]), resultflag))
 
-        logging.info('VECTORS DONE - generated {0} dog vectors and {1} cat vectors'.format(len(self.dog_vectors),len(self.cat_vectors)))
+        for r in results:
+            affectedVec = self.dog_vectors if r[1] == 0 else self.cat_vectors
+            affectedVec.append(r[0].get())
+
+        pool.close()
+        pool.join()
+        self.mytimer.tick()
+        logging.info('VECTORS DONE - generated {0} dog vectors and {1} cat vectors'.format(len(self.dog_vectors), len(self.cat_vectors)))
 
     def store_data(self):
 
@@ -143,17 +158,17 @@ class feature_extractor(object):
         if(self.load_test_bit):
             logging.info('LOAD TEST FOR STORED DATA')
             feats = Side_Functions.load_file(self.filepath_texel_features)
-            #print 'Features: {}'.format(feats)
+            # print 'Features: {}'.format(feats)
             logging.info("feature 2", feats[2])
             logging.info("feature 12", feats[12])
             logging.info("feature 34", feats[19])
             dogs = Side_Functions.load_file(self.filepath_dog_vectors)
-            #print 'Dogs: {}'.format(dogs)
+            # print 'Dogs: {}'.format(dogs)
             logging.info("dogs 2", dogs[2])
             logging.info("dogs 4", dogs[4])
             logging.info("dogs 7", dogs[7])
             cats = Side_Functions.load_file(self.filepath_cat_vectors)
-            #print 'Cats: {}'.format(cats)
+            # print 'Cats: {}'.format(cats)
             logging.info("cats 1", cats[1])
             logging.info("cats 4", cats[4])
             logging.info("cats 6", cats[6])

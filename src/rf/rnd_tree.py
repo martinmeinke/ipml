@@ -2,23 +2,30 @@ import math
 import random
 import operator
 
+'''
+function for parallel building of trees
+args[0] has the attributes for RandomTree constructor
+args[1] is the data
+args[2] are the attributes
+'''
+def parallel_build_tree(args):
+    tree = RandomTree(args[0])
+    tree.build_tree(args[1], args[2])
+    return tree
+
+
 class RandomTree(object):
-    MIN_GAIN = 10e-5
-    #TODO:optimize, size of feature subset orig 8
-    #NUM_ATTRIBUTES = 20
-    NUM_ATTRIBUTES = 8
-    #TODO:optimize, threshold steps orig 10 
-    #NUM_THRES_STEPS = 40
-    NUM_THRES_STEPS = 10
-    
-    #maximum tries for testing different attribute sets to find best split
-    MAX_TRIES = 10
-    
     root_node = None
     
-    def __init__(self, data, attributes):
-        self.root_node = self.generate_tree(data, attributes)
+    def __init__(self, f_parms):
+        self.f_parms = f_parms
 
+    '''
+    wrapper to build the tree and set the root node
+    '''
+    def build_tree(self, data, attributes):
+        self.root_node = self.generate_tree(data, attributes)
+        
     '''
     generates a rondomized decision tree
     '''
@@ -45,13 +52,13 @@ class RandomTree(object):
     
         #decide best feature to split on
         
-        attributes = self.list_index_sub_sample(attributes, self.NUM_ATTRIBUTES)
+        attributes = self.list_index_sub_sample(attributes, self.f_parms.NUM_ATTRIBUTES)
         best_gain = -1
         best_threshold = -1
         
-        for i in range(self.MAX_TRIES):
+        for i in range(self.f_parms.MAX_TRIES):
             for attribute in attributes:
-                for threshold in self.calc_thresholds(self.find_max(data,attribute), self.NUM_THRES_STEPS):
+                for threshold in self.calc_thresholds(self.find_max(data,attribute), self.f_parms.NUM_THRES_STEPS):
                     gain = self.calc_inf_gain(data, attribute, threshold)
                     if gain > best_gain:
                         best_gain = gain
@@ -59,11 +66,11 @@ class RandomTree(object):
                         best_threshold = threshold
             
             #if gain sufficient break
-            if(best_gain > self.MIN_GAIN):
+            if(best_gain > self.f_parms.MIN_GAIN):
                 break
             #if maximum iteration not reached try new set of attributes
-            elif best_gain < self.MIN_GAIN and i < (self.MAX_TRIES -1):
-                attributes = self.list_index_sub_sample(attributes, self.NUM_ATTRIBUTES)
+            elif best_gain < self.f_parms.MIN_GAIN and i < (self.f_parms.MAX_TRIES -1):
+                attributes = self.list_index_sub_sample(attributes, self.f_parms.NUM_ATTRIBUTES)
             else:
                 root = DecisionTreeNode()
                 root.set_label(default_val)
@@ -76,7 +83,6 @@ class RandomTree(object):
         r_child = self.generate_tree(no_set, attributes)
         root.set_l_child(l_child)
         root.set_r_child(r_child)
-    
         return root
     
     def decide(self, features):

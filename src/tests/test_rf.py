@@ -1,5 +1,6 @@
-from rf.rnd_forest import RandomForest
+from rf.rnd_forest import RandomForest, ForestParams 
 from os import path
+import cProfile
 
 import unittest
 
@@ -26,6 +27,14 @@ class RFTest(unittest.TestCase):
             result.append(elem)
         return result
     
+    def getLabelsFromFile(self, fileName):
+        f = open(fileName)
+        result = []
+        
+        for line in f:
+            result.append(int(line))
+        return result
+    
     def getAccuracy(self, list1, list2):
         """
         Returns the error rate between list1 and list2
@@ -37,9 +46,12 @@ class RFTest(unittest.TestCase):
                 count += 1
         return count / float(size)
 
-    def testRF(self, tree_count = 50):
+    def testRF(self):
         #Training 
-        forest = RandomForest(tree_count, self.trainFeatures, self.trainLabels, True)
+        forest = RandomForest(self.trainFeatures, self.trainLabels)
+        #cProfile.runctx('forest.generate_forest()',globals(),locals())
+        #forest.parallel_generate_forest()
+        forest.generate_forest()
         predictions = forest.predict(self.trainFeatures)
         acc = self.getAccuracy(predictions, self.trainLabels)
         print("Error rate on train set: " + str(acc * 100) + "%")

@@ -5,7 +5,6 @@ Created on Jan 15, 2015
 '''
 import os
 import pickle
-import time
 import logging
 
 class time_manager:

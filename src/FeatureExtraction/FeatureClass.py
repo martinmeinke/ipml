@@ -10,7 +10,6 @@ from PIL import Image
 import multiprocessing as mp
 
 # import files
-import helpers
 import Features
 import Vectors
 import Side_Functions
@@ -104,14 +103,12 @@ class feature_extractor(object):
         img.close()
         return data
 
-       
     def compute_vectors(self):
-
         if(not self.compute_vectors_bit):
             return
 
         logging.info('COMPUTING VECTORS')
-        
+
         trainset = self._dataprovider.TrainData
         trainlabels = self._dataprovider.TrainLabels
         n = len(trainset)

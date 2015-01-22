@@ -3,10 +3,8 @@ Created on Jan 15, 2015
 
 @author: patrik
 '''
-import numpy as np
-from cmath import sqrt
+
 import CPP_Functions
-import time
 
 def compute_feature_vector(image, feature_list):
     n = len(feature_list)

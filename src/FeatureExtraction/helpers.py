@@ -8,6 +8,7 @@ from PIL import Image
 import os
 import random
 import numpy
+import logging
 import matplotlib.pyplot as plt
 from math import sqrt
 
@@ -86,7 +87,7 @@ def resize_images_quadratic(inpath, tgtpath, edgelen=128):
         im = Image.open(inpath+'/'+i)
         imResize = resize_image(im, edgelen)
         imResize.save(tgtpath + '/' + i, 'JPEG', quality=100)
-        print "Saving "+ i
+        logging.info("Saving "+ i)
             
 def isdog(filename):
     if "dog" in filename:

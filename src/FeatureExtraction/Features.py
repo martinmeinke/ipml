@@ -4,19 +4,12 @@ Created on Jan 15, 2015
 @author: patrik
 '''
 
-import cv2
-from PIL import Image
 import numpy as np
-from matplotlib import pyplot as plt
-from matplotlib.mathtext import DELTA
-from cmath import sqrt
-from math import floor
-from cv2 import waitKey
-from matplotlib.pyplot import jet
-import os.path
-import pickle
-import time
 import CPP_Functions
+import logging
+from matplotlib import pyplot as plt
+from math import floor
+
 
 def cutimage(image,edgesize,features):
     
@@ -72,7 +65,7 @@ def update_feature_list(feature_list, texel_list, dist_threshold, max_num_of_fea
         texel_list.pop(i)
         n = len(texel_list)
     
-    print "{0} features added // {1} features discarted".format(c_added,c_discarted)
+    logging.info("{0} features added // {1} features discarted".format(c_added,c_discarted))
     return feature_list
 
 def show_texel_list(texel_list):

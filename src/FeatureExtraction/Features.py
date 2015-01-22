@@ -11,12 +11,13 @@ from matplotlib import pyplot as plt
 from math import floor
 
 
-def cutimage(image,edgesize,features):
+def cutimage(image,edgesize):
     
     h,w,d = image.shape
     ddelta = edgesize
     rrow = h / ddelta
     ccol = w / ddelta
+    features = []
 
     for r in xrange(0,rrow):
         for c in xrange(0,ccol):

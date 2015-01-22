@@ -12,15 +12,18 @@ class DataProvider(object):
     The data sets contain the absolute file path, the label sets contain CAT_LABEL and DOG_LABEL, corresponding
     to whether the data is a dog or cat file.
     '''
-    RAWDATADIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data.all/")
+    RAWDATADIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data/")
     CAT_DATAPREFIX = "cat"
     DOG_DATAPREFIX = "dog"
     IMG_EXT = "jpg"
     CAT_LABEL = -1
     DOG_LABEL = 1
     SAVEPATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data_segmentation")
+    DEFAULT_SEGMENTATION = (70, 15, 15)
 
-    def __init__(self, rawDataDir = "", catDataPrefix = "", dogDataPrefix = ""):
+    def __init__(self, catLabel = None, dogLabel = None, rawDataDir = "", catDataPrefix = "", dogDataPrefix = ""):
+        self.CatLabel = catLabel if catLabel != None else self.CAT_LABEL # don't use "or" syntax to allow 0 as value
+        self.DogLabel = dogLabel if dogLabel != None else self.DOG_LABEL # don't use "or" syntax to allow 0 as value
         self._datadir = rawDataDir or self.RAWDATADIR
         self._catprefix = catDataPrefix or self.CAT_DATAPREFIX
         self._dogprefix = dogDataPrefix or self.DOG_DATAPREFIX
@@ -31,18 +34,20 @@ class DataProvider(object):
         self.TestData = None
         self.TestLabels = None
 
-    def load(self, segmentation, catLabel = None, dogLabel = None):
-        catLabel = self.CAT_LABEL if catLabel == None else catLabel
-        dogLabel = self.DOG_LABEL if dogLabel == None else dogLabel
+    def load(self, segmentation = None):
+        segmentation = segmentation or self.DEFAULT_SEGMENTATION
         # normalize segmentation
         segmentation = map(lambda x : float(x) / sum(segmentation), segmentation)
 
-        label = lambda x : catLabel if x.startswith(self.CAT_DATAPREFIX) else dogLabel # can only be DOG_PREFIX otherwise because of file filter
+        label = lambda x : self.CatLabel if x.startswith(self.CAT_DATAPREFIX) else self.DogLabel # can only be DOG_PREFIX otherwise because of file filter
         # list available files
         filematcher = re.compile("^({}|{})\.[0-9]+\.{}$".format(self._catprefix, self._dogprefix, self.IMG_EXT), re.IGNORECASE)
         logging.info("Creating file list")
         labeledfiles = [(os.path.join(self.RAWDATADIR, f), label(f)) for f in os.listdir(self.RAWDATADIR) if filematcher.match(f)]
         logging.info("Shuffling file list")
+        # we shuffle twice. why? because python docs say that for bigger sequences only some permutations can be created
+        # because of the limits of the pseudo random number generator. doing it twice we at least increase the chances for more randomness
+        random.shuffle(labeledfiles)
         random.shuffle(labeledfiles)
 
         nData = len(labeledfiles)

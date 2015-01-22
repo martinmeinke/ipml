@@ -5,6 +5,8 @@ Created on Jan 15, 2015
 '''
 import numpy as np
 import logging
+from PIL import Image
+
 # import files
 import helpers
 import Features
@@ -14,8 +16,9 @@ import Side_Functions
 
 class feature_extractor(object):
     
-    def __init__(self, integrate_images_bit = 1, display_features_bit = 0, compute_vectors_bit = 1, load_data_bit = 0, store_data_bit = 1,load_test_bit=1):
+    def __init__(self, dataprovider, integrate_images_bit = 1, display_features_bit = 0, compute_vectors_bit = 1, load_data_bit = 0, store_data_bit = 1,load_test_bit=1):
         #start timer, variables
+        self._dataprovider = dataprovider
         self.texel_features = []
         self.dog_vectors = []
         self.cat_vectors = []
@@ -38,17 +41,6 @@ class feature_extractor(object):
         self.load_test_bit = load_test_bit
         
         self.mytimer = Side_Functions.time_manager()
-        
-
-    def partition_data(self):
-        #FEATURE EXTRACTION
-        logging.info('PARTIONING DATA FOR EXTRACTION OF FEATURES')
-
-        set3 = helpers.create_samples("../../data", self.partition1)
-        self.feature_images = set3[0]
-        self.mytimer.tick()
-
-        logging.info('PARTITIONING DONE')
 
     def load_data(self):
 
@@ -66,14 +58,13 @@ class feature_extractor(object):
             
             logging.info('INTEGRATING IMAGES IN TEXEL FEATURE LIST')
 
-            n = len(self.feature_images[0])
+            trainset = self._dataprovider.TrainData
             extracted_texels = []
             
             logging.info('cutting images')
         
-            for i in xrange(0,n):
-                
-                extracted_texels = Features.cutimage(self.feature_images[0][i], self.feature_border, extracted_texels)
+            for img in trainset:
+                extracted_texels += Features.cutimage(self.read_img(img), self.feature_border)
         
             self.mytimer.tick()
             
@@ -100,29 +91,33 @@ class feature_extractor(object):
     
             logging.info('DISPLAYING DONE')
 
+    def read_img(self, path):
+        img = Image.open(path)
+        data = np.array(img)
+        img.close()
+        return data
+
     def compute_vectors(self):
 
-        if(self.compute_vectors_bit):
-            logging.info('COMPUTING VECTORS')
-    
-            n = len(self.feature_images[0])
+        if(not self.compute_vectors_bit):
+            return
 
-            for i in range(0,n):
-                if (self.feature_images[1][i] == 1): #-->1 = dog
-                    if(len(self.dog_vectors) < self.max_num_of_vectors):
-                        img = np.asarray(self.feature_images[0][i], np.float32)
-                        vect = Vectors.compute_feature_vector(img, self.texel_features)
-                        self.dog_vectors.append(vect)
-                        logging.info('Vector {} integrated'.format(i))
-                        self.mytimer.tick()
-                else:
-                    if(len(self.cat_vectors) < self.max_num_of_vectors):
-                        img = np.asarray(self.feature_images[0][i], np.float32)
-                        vect = Vectors.compute_feature_vector(img, self.texel_features)
-                        self.cat_vectors.append(vect)
-                        logging.info('Vector {} integrated'.format(i))
-                        self.mytimer.tick()            
-    
+        logging.info('COMPUTING VECTORS')
+
+        trainset = self._dataprovider.TrainData
+        trainlabels = self._dataprovider.TrainLabels
+        n = len(trainset)
+
+        for i in xrange(0,n):
+            affectedVecs = self.dog_vectors if trainlabels[i] == self._dataprovider.DogLabel else self.cat_vectors
+            if len(affectedVecs) > self.max_num_of_vectors:
+                continue
+            img = np.asarray(self.read_img(trainset[i]), np.float32)
+            vec = Vectors.compute_feature_vector(img, self.texel_features)
+            affectedVecs.append(vec)
+            logging.info('Vector {} integrated'.format(i))
+            self.mytimer.tick()
+
         logging.info('VECTORS DONE - generated {0} dog vectors and {1} cat vectors'.format(len(self.dog_vectors),len(self.cat_vectors)))
 
     def store_data(self):
@@ -140,7 +135,7 @@ class feature_extractor(object):
             logging.info('STORING CAT VECTORS')
             Side_Functions.save_data(self.filepath_cat_vectors, self.cat_vectors)
             self.mytimer.tick()
-    
+
         logging.info('STORING DONE')
 
     def load_test(self):
@@ -165,7 +160,6 @@ class feature_extractor(object):
     
     def extraction_run(self):
         
-        self.partition_data()
         self.load_data()
         self.integrate_data()
         self.display_data()

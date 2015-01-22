@@ -14,9 +14,9 @@ class RFTest(unittest.TestCase):
 
     def setUp(self):
         self.trainFeatures = self.getDataFromFile(self.trainFeaturesFile)
-        self.trainLabels = self.getLabelsFromFile(self.trainLabelsFile)
+        self.trainLabels = self.getDataFromFile(self.trainLabelsFile)
         self.valFeatures = self.getDataFromFile(self.valFeatuesFile)
-        self.valLabels = self.getLabelsFromFile(self.valLabelsFile)
+        self.valLabels = self.getDataFromFile(self.valLabelsFile)
 
     def getDataFromFile(self, fileName):
         f = open(fileName)
@@ -42,13 +42,13 @@ class RFTest(unittest.TestCase):
         size = len(list1)
         count = 0
         for i in xrange(size):
-            if list1[i] != list2[i]:
+            if list1[i] != list2[i][0]:
                 count += 1
         return count / float(size)
 
     def testRF(self):
         #Training 
-        forest = RandomForest(self.trainFeatures, self.trainLabels, True)
+        forest = RandomForest(self.trainFeatures, self.trainLabels)
         #cProfile.runctx('forest.generate_forest()',globals(),locals())
         #forest.parallel_generate_forest()
         forest.generate_forest()

@@ -5,6 +5,9 @@ from math import sqrt
 from rnd_tree import RandomTree, parallel_build_tree
 from multiprocessing import Pool
 import multiprocessing
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ForestParams(object):
     #TODO:optimize, not a fix number for subset, orig 100    
@@ -23,23 +26,22 @@ class ForestParams(object):
     #maximum tries for testing different attribute sets to find best split
     MAX_TRIES = 10
     
-    FOREST_SIZE = 10
+    FOREST_SIZE = 100
 
 class RandomForest(object):
     forest = None
     f_parms = None 
     
-    def __init__(self, training_features, training_labels, verbose = False):
+    def __init__(self, training_features, training_labels):
         num_input,num_features = shape(training_features)
         self.init_params(num_input,num_features)
         self.forest = []
-        self.verbose = verbose
         self.train_data = self.create_mapping(training_features, training_labels)
         
     def init_params(self, num_intput, num_features):
         self.f_parms = ForestParams()
-        self.f_parms.NUM_ATTRIBUTES = int(num_features /4)
-        self.f_parms.SAMPLE_SUBSET_SIZE = int(sqrt(num_intput)) 
+        self.f_parms.NUM_ATTRIBUTES = int(num_features /3)
+        self.f_parms.SAMPLE_SUBSET_SIZE = int(sqrt(num_intput))
     
     def prepare_forest(self):
         for __ in xrange(self.f_parms.FOREST_SIZE):
@@ -68,16 +70,13 @@ class RandomForest(object):
 
     def generate_forest(self):
         i=0
-        args = []
         self.prepare_forest()
         for tree in self.forest:
             data_subset = self.dict_subsample(self.train_data, self.f_parms.SAMPLE_SUBSET_SIZE)
             attributes = [j for j in xrange(len(self.train_data.items()[0][0]))]
             tree.build_tree(data_subset, attributes)
             i+=1
-            if self.verbose:
-                if i % 10 == 0:
-                    print("Forest size: " + str(i))
+            logger.info("Forest size: " + str(i))
                             
     
     def parallel_generate_forest(self):
@@ -103,7 +102,7 @@ class RandomForest(object):
     
         for _ in xrange(sub_size):
             sample = data.items()[random.randrange(0, data_size)]
-            subset[sample[0]] = sample[1]
+            subset[sample[0]] = sample[1][0]
     
         return subset
     

@@ -13,8 +13,7 @@ import multiprocessing as mp
 # import files
 import Features
 import Vectors
-import Side_Functions
-from Utility import LoadPickleFile, SavePickleFile
+from Utility import LoadPickleFile, SavePickleFile, TimeManager
 
 def compute_features(path, features):
     img = Image.open(path)
@@ -49,14 +48,15 @@ class feature_extractor(object):
         self.compute_vectors_bit = compute_vectors_bit
         self.load_test_bit = load_test_bit
         
-        self.mytimer = Side_Functions.time_manager()
+        self.mytimer = TimeManager()
 
-    def load_data(self):
+    def load_data(self, featuresPath =""):
+        featuresPath = featuresPath or self.EXTRACTOR_DATA_FILE
 
         if(self.load_data_bit):
             logging.info('LOADING TEXEL FEATURES')
     
-            self.texel_features = Side_Functions.load_file(self.filepath_texel_features)
+            self.texel_features = LoadPickleFile(featuresPath)
             self.mytimer.tick()
     
             logging.info('LOADING DONE')
@@ -160,17 +160,17 @@ class feature_extractor(object):
 
         if(self.load_test_bit):
             logging.info('LOAD TEST FOR STORED DATA')
-            feats = Side_Functions.load_file(self.filepath_texel_features)
+            feats = LoadPickleFile(self.EXTRACTOR_DATA_FILE)
             # print 'Features: {}'.format(feats)
             logging.info("feature 2", feats[2])
             logging.info("feature 12", feats[12])
             logging.info("feature 34", feats[19])
-            dogs = Side_Functions.load_file(self.filepath_dog_vectors)
+            dogs = LoadPickleFile(self.DOG_FEATURES_FILE)
             # print 'Dogs: {}'.format(dogs)
             logging.info("dogs 2", dogs[2])
             logging.info("dogs 4", dogs[4])
             logging.info("dogs 7", dogs[7])
-            cats = Side_Functions.load_file(self.filepath_cat_vectors)
+            cats = LoadPickleFile(self.CAT_FEATURES_FILE)
             # print 'Cats: {}'.format(cats)
             logging.info("cats 1", cats[1])
             logging.info("cats 4", cats[4])

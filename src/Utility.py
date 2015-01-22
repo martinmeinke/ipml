@@ -1,20 +1,23 @@
+'''
+Created on Jan 15, 2015
 
-import os.path
+@author: patrik
+'''
+import os
 import pickle
-import time
 import logging
 
-class time_manager:
+class TimeManager:
     
     def __init__(self):
-        self.start_time = time.clock()
+        self.start_time = os.times()[4]
         self.elapsed_time = 0
         self.actual_tick = 0
         
     def tick(self):
-        self.actual_tick = time.clock() - self.elapsed_time-self.start_time
-        self.elapsed_time = time.clock() - self.start_time
-        print 'last action: ', self.actual_tick, '; totally elapsed: ', self.elapsed_time
+        self.actual_tick = os.times()[4] - self.elapsed_time-self.start_time
+        self.elapsed_time = os.times()[4] - self.start_time
+        logging.info("last action: %.2fs; totally elapsed: %.2fs", self.actual_tick, self.elapsed_time)
 
 def LoadPickleFile(path):
     """

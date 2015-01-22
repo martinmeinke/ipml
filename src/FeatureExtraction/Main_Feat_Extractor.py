@@ -5,7 +5,6 @@ Created on Jan 15, 2015
 '''
 # import libraries
 import numpy as np
-import cv2
 import profile
 
 # import files

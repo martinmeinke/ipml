@@ -46,7 +46,7 @@ class feature_extractor(object):
         #FEATURE EXTRACTION
         print 'PARTIONING DATA FOR EXTRACTION OF FEATURES'
 
-        set3 = helpers.create_samples("testim2", self.partition1)
+        set3 = helpers.create_samples("../../data", self.partition1)
         self.feature_images = set3[0]
         self.mytimer.tick()
 

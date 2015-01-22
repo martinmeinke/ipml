@@ -9,7 +9,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.mathtext import DELTA
 from cmath import sqrt
-from bzrlib.upgrade import Convert
 from math import floor
 from cv2 import waitKey
 from matplotlib.pyplot import jet

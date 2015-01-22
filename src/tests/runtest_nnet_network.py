@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s: %(m
 logger = logging.getLogger(__name__)
 
 MODEL_NAME = "real_v3"
-PARTITIONING = (85,10,5)
+PARTITIONING = (80,10,10)
 DATASET = "../../data/train_images_96_100percent"
 # DATASET = "../../data/train_images_128_100percent"
 
@@ -28,14 +28,14 @@ class Test(unittest.TestCase):
     trainer = None
 
     # HYPERPARAMETERS
-    C1 = (50, 1, 9, 9)
-    C2 = (80, 50, 5, 5)
-    C3 = (100, 80, 3, 3)
+    C1 = (4, 1, 9, 9)
+    C2 = (6, 4, 5, 5)
+    C3 = (9, 6, 3, 3)
     POOL1 = (2, 2)
     POOL2 = (2, 2)
     POOL3 = (2, 2)
-    H1OUT = 900
-    H2OUT = 1200
+    H1OUT = 90
+    H2OUT = 120
 
     TANH = 0
     RELU = 1

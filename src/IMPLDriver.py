@@ -10,7 +10,7 @@ class IMPLRunConfiguration(object):
     
     def __init__(self):
         self.CreateDataSetPartitioning = False # create a new train/validation data segmentation or load the existing
-        self.ValidationDataPortion = 0.2 # how much of the labeled data should be used as the validation set 
+        self.DataSegmentation = (0.6, 0.2, 0.2) # how much of the labeled data should be used as the train/validation/test set 
         self.SaveDataSetPartitioning = False # should we save the (probably newly created) data segmentation or not
         self.RawDataDir = DataProvider.RAWDATADIR # where we can find the raw data
         self.CatDataPrefix = DataProvider.CAT_DATAPREFIX # the prefix of the cat files
@@ -48,12 +48,12 @@ class IMPLDriver(object):
     def run(self, setup):
         self.Setup = setup
         LoggingSetup().setup()
-        self._initFeatureProvider();
+        self._initDataProvider()
+        self._initFeatureProvider()
         
         if self.Setup.RunCNN:
             logging.warn("No support to run CNN through driver, yet")
             # TODO: support for CNN
-            # self._initDataProvider() # make sure to initialize the data provider
             # cnn = CNN(self.DataProvider)
             # self._runClassifier(cnn, self.Setup.CNNArgs)
 
@@ -85,16 +85,15 @@ class IMPLDriver(object):
             logging.info("Loading saved features from '%s', '%s', and '%s'", *featurefiles)
             self.FeatureProvider = SavedFeatureProvider(*featurefiles)
             logging.info("Start to load SavedFeatureProvider")
-            self.FeatureProvider.load(self.Setup.ValidationDataPortion)
+            self.FeatureProvider.load(self.Setup.DataSegmentation[1]) # TODO: remove this workaround
             return
 
         # shit's getting real, we extract the features as we go!
-        self._initDataProvider() # make sure our data provider is ready
         logging.warn("No support for extracting features from the driver, yet.") # for now
         self.FeatureProvider = None
         # TODO: support for the "real" feature extractor 
-        # self.FeatureExtractor = FeatureExtractor(_self.DataProvider)
-        # self.FeatureProvider = FeatureProvider(self.FeatureExtractor)
+        # self.FeatureExtractor = FeatureExtractor()
+        # self.FeatureProvider = FeatureProvider(_self.DataProvider, self.FeatureExtractor)
         # logging.info("Load the FeatureExtractor based FeatureProvider")
         # self.FeatureProvider.load(self.Setup.FeatureExtractionArgs)
 
@@ -105,6 +104,9 @@ class IMPLDriver(object):
 
 
     def _initDataProvider(self):
+        if not self.Setup.RunSVM and not self.Setup.RunRF and not self.Setup.ExtractFeatures and not self.Setup.CreateDataSetPartitioning:
+            logging.info("Not initializing a feature provider - SVM, RF, and FeatureExtraction won't run")
+            return
         if self.DataProvider:
             logging.info("DataProvider already initialized")
             return
@@ -112,8 +114,8 @@ class IMPLDriver(object):
 
         # create new data segmentation or load from file?
         if self.Setup.CreateDataSetPartitioning:
-            logging.info("Loading data provider with validation data portion of {}".format(self.Setup.ValidationDataPortion))
-            self.DataProvider.load(self.Setup.ValidationDataPortion)
+            logging.info("Loading data provider with validation data portion of {}".format(self.Setup.DataSegmentation))
+            self.DataProvider.load(self.Setup.DataSegmentation)
         else:
             logging.info("Loading data provider from file")
             self.DataProvider.loadFromFile()
@@ -168,5 +170,12 @@ if __name__ == "__main__":
     extractAndSaveFeatures.SaveExtractedFeatures = True
     extractAndSaveFeatures.FeatureExtractionArgs = {}
     
+    # create and save a data segmentation
+    segmentDataAndSaveSegmentation = IMPLRunConfiguration()
+    segmentDataAndSaveSegmentation.ExtractFeatures = False
+    segmentDataAndSaveSegmentation.DataSegmentation = (70, 15, 15)
+    segmentDataAndSaveSegmentation.CreateDataSetPartitioning = True
+    segmentDataAndSaveSegmentation.SaveDataSetPartitioning = True
+
     driver = IMPLDriver()
-    driver.run(loadSVMandValidate)
+    driver.run(segmentDataAndSaveSegmentation)

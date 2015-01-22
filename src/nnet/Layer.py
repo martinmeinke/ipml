@@ -16,20 +16,21 @@ class Layer(object):
     num_outputs = None
     outputshape = None
     params = None
-    
+    regularized_params = []
+
     def __init__(self, params):
         '''
         Constructor
         '''
-     
-    @abstractmethod   
+
+    @abstractmethod
     def build(self):
         pass
-    
-#   @abstractmethod   
+
+#   @abstractmethod
 #   def serialize_params(self):
 #       pass
-    
-#   @abstractmethod   
-#   def deserialize_params(self):
-#       pass
+
+    @abstractmethod
+    def restore_params(self):
+        pass

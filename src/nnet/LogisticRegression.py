@@ -8,12 +8,13 @@ import numpy
 import theano
 import theano.tensor as T
 from nnet.Layer import Layer
-from sklearn.decomposition.tests.test_truncated_svd import rng
 import logging
 
 logger = logging.getLogger(__name__)
 
+
 class SoftMax(Layer):
+
     """Multi-class Logistic Regression Class
 
     The logistic classifiers is fully described by a weight matrix :math:`W`
@@ -36,10 +37,12 @@ class SoftMax(Layer):
         """
         self.rng = rng
         self.n_out = n_out
-        
+        self.lambda_l1 = 0.000000
+        self.lambda_l2 = 0.00005
+
     def build(self):
         n_in = self.previous.num_outputs
-        
+
         # start-snippet-1
         # initialize with 0 the weights W as a matrix of shape (n_in, n_out)
         self.W = theano.shared(
@@ -48,7 +51,7 @@ class SoftMax(Layer):
                 dtype=theano.config.floatX  # @UndefinedVariable
             ),
             name='W',
-            borrow=True
+            borrow=False
         )
         # initialize the baises b as a vector of n_out 0s
         self.b = theano.shared(
@@ -57,7 +60,7 @@ class SoftMax(Layer):
                 dtype=theano.config.floatX  # @UndefinedVariable
             ),
             name='b',
-            borrow=True
+            borrow=False
         )
 
         # symbolic expression for computing the matrix of class-membership
@@ -74,16 +77,17 @@ class SoftMax(Layer):
         # probability is maximal
         self.y_pred = T.argmax(self.p_y_given_x, axis=1)
         # end-snippet-1
-        
-        if self.previous == None:
+
+        if self.previous is None:
             self.num_output_featuremaps = 1
         else:
             self.num_output_featuremaps = self.previous.num_output_featuremaps
-            
+
         # parameters of the model
         self.params = [self.W, self.b]
+        self.regularized_params = [self.W]
 
-    def negative_log_likelihood(self, y):
+    def nll(self, y):
         """Return the mean of the negative log-likelihood of the prediction
         of this model under a given target distribution.
 
@@ -115,6 +119,10 @@ class SoftMax(Layer):
         return -T.mean(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
         # end-snippet-2
 
+    def regularization(self, regularized_weights):
+        # the loss
+        return self.lambda_l1 * sum([T.sum(abs(w)) for w in regularized_weights]) + self.lambda_l2 * sum([T.sum(w ** 2) for w in regularized_weights])
+
     def errors(self, y):
         """Return a float representing the number of errors in the minibatch
         over the total number of examples of the minibatch ; zero one
@@ -138,3 +146,31 @@ class SoftMax(Layer):
             return T.mean(T.neq(self.y_pred, y))
         else:
             raise NotImplementedError()
+
+    def errorslist(self, y):
+        """Return a float representing the number of errors in the minibatch
+        over the total number of examples of the minibatch ; zero one
+        loss over the size of the minibatch
+
+        :type y: theano.tensor.TensorType
+        :param y: corresponds to a vector that gives for each example the
+                  correct label
+        """
+
+        # check if y has same dimension of y_pred
+        if y.ndim != self.y_pred.ndim:
+            raise TypeError(
+                'y should have the same shape as self.y_pred',
+                ('y', y.type, 'y_pred', self.y_pred.type)
+            )
+        # check if y is of the correct datatype
+        if y.dtype.startswith('int'):
+            # the T.neq operator returns a vector of 0s and 1s, where 1
+            # represents a mistake in prediction
+            return T.neq(self.y_pred, y)
+        else:
+            raise NotImplementedError()
+
+    def restore_params(self):
+        self.W.container.data = self.params[0].container.data
+        self.b.container.data = self.params[1].container.data

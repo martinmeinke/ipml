@@ -56,3 +56,7 @@ target/
 # eclipse
 .project
 .pydevproject
+
+# logs
+logs/
+trainings/

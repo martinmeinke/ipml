@@ -1,20 +1,45 @@
 import operator
 import random
+from numpy import shape
+from math import sqrt
 from rnd_tree import RandomTree, parallel_build_tree
-
 from multiprocessing import Pool
 import multiprocessing
+
+class ForestParams(object):
+    #TODO:optimize, not a fix number for subset, orig 100    
+    SAMPLE_SUBSET_SIZE = 1500
+    #SAMPLE_SUBSET_SIZE = 100
+    
+    MIN_GAIN = 10e-5
+    #TODO:optimize, size of feature subset orig 8
+    NUM_ATTRIBUTES = 20
+    #NUM_ATTRIBUTES = 8
+    
+    #TODO:optimize, threshold steps orig 10 
+    NUM_THRES_STEPS = 40
+    #NUM_THRES_STEPS = 10
+    
+    #maximum tries for testing different attribute sets to find best split
+    MAX_TRIES = 10
+    
+    FOREST_SIZE = 10
 
 class RandomForest(object):
     forest = None
     f_parms = None 
     
-    def __init__(self, f_params, training_features, training_labels, verbose = False):
-        self.f_parms = f_params
+    def __init__(self, training_features, training_labels, verbose = False):
+        num_input,num_features = shape(training_features)
+        self.init_params(num_input,num_features)
         self.forest = []
         self.verbose = verbose
         self.train_data = self.create_mapping(training_features, training_labels)
-
+        
+    def init_params(self, num_intput, num_features):
+        self.f_parms = ForestParams()
+        self.f_parms.NUM_ATTRIBUTES = int(num_features /4)
+        self.f_parms.SAMPLE_SUBSET_SIZE = int(sqrt(num_intput)) 
     
     def prepare_forest(self):
         for __ in xrange(self.f_parms.FOREST_SIZE):

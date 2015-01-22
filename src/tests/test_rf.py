@@ -1,5 +1,4 @@
-from rf.rnd_forest import RandomForest
-from rf.RFClassifier import ForestParams
+from rf.rnd_forest import RandomForest, ForestParams 
 from os import path
 import cProfile
 
@@ -49,10 +48,10 @@ class RFTest(unittest.TestCase):
 
     def testRF(self):
         #Training 
-        f_parms = ForestParams()
-        forest = RandomForest(f_parms, self.trainFeatures, self.trainLabels, True)
+        forest = RandomForest(self.trainFeatures, self.trainLabels, True)
         #cProfile.runctx('forest.generate_forest()',globals(),locals())
-        forest.parallel_generate_forest()
+        #forest.parallel_generate_forest()
+        forest.generate_forest()
         predictions = forest.predict(self.trainFeatures)
         acc = self.getAccuracy(predictions, self.trainLabels)
         print("Error rate on train set: " + str(acc * 100) + "%")

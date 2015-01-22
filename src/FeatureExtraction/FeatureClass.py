@@ -7,7 +7,7 @@ import os
 import numpy as np
 import logging
 from PIL import Image
-
+from sys import getsizeof
 import multiprocessing as mp
 
 # import files
@@ -30,6 +30,7 @@ class feature_extractor(object):
     def __init__(self, dataprovider, integrate_images_bit=1, display_features_bit=0, compute_vectors_bit=1, load_data_bit=0, store_data_bit=1, load_test_bit=1):
         # start timer, variables
         self._dataprovider = dataprovider
+        self._maxTexelPics = 5000
         self.texel_features = []
         self.dog_vectors = []
         self.cat_vectors = []
@@ -38,8 +39,8 @@ class feature_extractor(object):
         self.distance_threshold = 100
         self.feature_border = 5  #!!!cannot be changed!!!
         self.partition1 = (10, 0, 0)
-        self.max_num_of_texels = 100
-        self.max_num_of_vectors = 100
+        self.max_num_of_texels = 1000
+        self.max_num_of_vectors = 15000
         
         self.load_data_bit = load_data_bit
         self.store_data_bit = store_data_bit
@@ -61,6 +62,7 @@ class feature_extractor(object):
     
             logging.info('LOADING DONE')
 
+
     def integrate_data(self):
 
         if(self.integrate_images_bit):
@@ -68,6 +70,11 @@ class feature_extractor(object):
             logging.info('INTEGRATING IMAGES IN TEXEL FEATURE LIST')
 
             trainset = self._dataprovider.TrainData
+            # restrict the set of images we take the texels from
+            # TODO: alternative method: compute how many texels we would have (checking image sizes), then load the texel from file on demand
+            #       This approach would take longer but would fit into main memory. We could even implement a buffer of ~2000 images
+            #       to speed that method up
+            trainset = trainset if len(trainset) < self._maxTexelPics else trainset[:self._maxTexelPics]
             extracted_texels = []
             
             logging.info('cutting images')
@@ -75,6 +82,7 @@ class feature_extractor(object):
             for img in trainset:
                 extracted_texels += Features.cutimage(self.read_img(img), self.feature_border)
         
+            logging.info("Size of self: %d", getsizeof(self))
             self.mytimer.tick()
             
             logging.info('{0} potential features'.format(len(extracted_texels)))
@@ -126,9 +134,14 @@ class feature_extractor(object):
                 continue
             results.append((pool.apply_async(compute_features, [trainset[i], self.texel_features]), resultflag))
 
+        i = 0
         for r in results:
             affectedVec = self.dog_vectors if r[1] == 0 else self.cat_vectors
             affectedVec.append(r[0].get())
+            i += 1
+            if i % 50 == 0:
+                logging.info("Created a total of %d vectors...", i)
+                self.mytimer.tick()
 
         pool.close()
         pool.join()
@@ -179,10 +192,10 @@ class feature_extractor(object):
     def extraction_run(self):
         
         self.load_data()
-        self.integrate_data()
+        #self.integrate_data()
         self.display_data()
         self.compute_vectors()
         self.store_data()
-        self.load_test()       
+        #self.load_test()       
 
         logging.info('END')

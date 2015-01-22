@@ -178,4 +178,4 @@ if __name__ == "__main__":
     segmentDataAndSaveSegmentation.SaveDataSetPartitioning = True
 
     driver = IMPLDriver()
-    driver.run(segmentDataAndSaveSegmentation)
+    driver.run(trainSVMandValidate)

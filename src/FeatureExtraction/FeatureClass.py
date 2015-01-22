@@ -3,6 +3,7 @@ Created on Jan 15, 2015
 
 @author: patrik
 '''
+import os
 import numpy as np
 import logging
 from PIL import Image
@@ -13,6 +14,7 @@ import multiprocessing as mp
 import Features
 import Vectors
 import Side_Functions
+from Utility import LoadPickleFile, SavePickleFile
 
 def compute_features(path, features):
     img = Image.open(path)
@@ -21,6 +23,10 @@ def compute_features(path, features):
     return Vectors.compute_feature_vector(data, features)
 
 class feature_extractor(object):
+    DATADIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../features/")
+    CAT_FEATURES_FILE = os.path.join(DATADIR, "cat_vectors")
+    DOG_FEATURES_FILE = os.path.join(DATADIR, "dog_vectors")
+    EXTRACTOR_DATA_FILE = os.path.join(DATADIR, "texel_features")
     
     def __init__(self, dataprovider, integrate_images_bit=1, display_features_bit=0, compute_vectors_bit=1, load_data_bit=0, store_data_bit=1, load_test_bit=1):
         # start timer, variables
@@ -35,9 +41,6 @@ class feature_extractor(object):
         self.partition1 = (10, 0, 0)
         self.max_num_of_texels = 100
         self.max_num_of_vectors = 100
-        self.filepath_texel_features = "save/texel_features"
-        self.filepath_dog_vectors = "save/dog_vectors"
-        self.filepath_cat_vectors = "save/cat_vectors"
         
         self.load_data_bit = load_data_bit
         self.store_data_bit = store_data_bit
@@ -132,20 +135,23 @@ class feature_extractor(object):
         self.mytimer.tick()
         logging.info('VECTORS DONE - generated {0} dog vectors and {1} cat vectors'.format(len(self.dog_vectors), len(self.cat_vectors)))
 
-    def store_data(self):
+    def store_data(self, catPath = "", dogPath = "", featuresPath =""):
+        catPath = catPath or self.CAT_FEATURES_FILE
+        dogPath = dogPath or self.DOG_FEATURES_FILE
+        featuresPath = featuresPath or self.EXTRACTOR_DATA_FILE
 
         if(self.store_data_bit):
             logging.info('STORING TEXEL FEATURES')
     
-            Side_Functions.save_data(self.filepath_texel_features, self.texel_features)
+            SavePickleFile(featuresPath, self.texel_features)
             self.mytimer.tick()
     
             logging.info('STORING DOG VECTORS')
-            Side_Functions.save_data(self.filepath_dog_vectors, self.dog_vectors)
+            SavePickleFile(dogPath, self.dog_vectors)
             self.mytimer.tick()
     
             logging.info('STORING CAT VECTORS')
-            Side_Functions.save_data(self.filepath_cat_vectors, self.cat_vectors)
+            SavePickleFile(catPath, self.cat_vectors)
             self.mytimer.tick()
 
         logging.info('STORING DONE')

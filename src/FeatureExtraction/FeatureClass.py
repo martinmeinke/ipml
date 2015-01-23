@@ -7,13 +7,12 @@ import os
 import numpy as np
 import logging
 from PIL import Image
-from sys import getsizeof
 import multiprocessing as mp
 
 # import files
 import Features
 import Vectors
-from Utility import LoadPickleFile, SavePickleFile, TimeManager
+from Utility import TimeManager
 
 def compute_features(path, features):
     img = Image.open(path)
@@ -21,181 +20,96 @@ def compute_features(path, features):
     img.close()
     return Vectors.compute_feature_vector(data, features)
 
-class feature_extractor(object):
-    DATADIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../features/")
-    CAT_FEATURES_FILE = os.path.join(DATADIR, "cat_vectors")
-    DOG_FEATURES_FILE = os.path.join(DATADIR, "dog_vectors")
-    EXTRACTOR_DATA_FILE = os.path.join(DATADIR, "texel_features")
+class FeatureExtractor(object):
+    DISTANCE_THRESHOLD = 100
+    NUM_FEATURES = 1000
+    MAX_TEXEL_PICS = 5000
     
-    def __init__(self, dataprovider, integrate_images_bit=1, display_features_bit=0, compute_vectors_bit=1, load_data_bit=0, store_data_bit=1, load_test_bit=1):
+    
+    def __init__(self, distance_threshold = None, num_features = None, max_texel_pics = None):
         # start timer, variables
-        self._dataprovider = dataprovider
-        self._maxTexelPics = 5000
         self.texel_features = []
-        self.dog_vectors = []
-        self.cat_vectors = []
-        self.feature_images = []
-
-        self.distance_threshold = 100
         self.feature_border = 5  #!!!cannot be changed!!!
-        self.partition1 = (10, 0, 0)
-        self.max_num_of_texels = 1000
-        self.max_num_of_vectors = 15000
-        
-        self.load_data_bit = load_data_bit
-        self.store_data_bit = store_data_bit
-        self.integrate_images_bit = integrate_images_bit
-        self.display_features_bit = display_features_bit
-        self.compute_vectors_bit = compute_vectors_bit
-        self.load_test_bit = load_test_bit
+        self.distance_threshold = distance_threshold or self.DISTANCE_THRESHOLD
+        self.num_features = num_features or self.NUM_FEATURES
+        self.maxTexelPics = max_texel_pics or self.MAX_TEXEL_PICS
         
         self.mytimer = TimeManager()
 
-    def load_data(self, featuresPath =""):
-        featuresPath = featuresPath or self.EXTRACTOR_DATA_FILE
-
-        if(self.load_data_bit):
-            logging.info('LOADING TEXEL FEATURES')
-    
-            self.texel_features = LoadPickleFile(featuresPath)
-            self.mytimer.tick()
-    
-            logging.info('LOADING DONE')
+    def loadState(self, state):
+        self.texel_features, self.feature_border, self.distance_threshold, self.num_features, self.maxTexelPics = state
 
 
-    def integrate_data(self):
+    def initialize(self, trainset):
 
-        if(self.integrate_images_bit):
-            
-            logging.info('INTEGRATING IMAGES IN TEXEL FEATURE LIST')
+        logging.info('INTEGRATING IMAGES IN TEXEL FEATURE LIST')
 
-            trainset = self._dataprovider.TrainData
-            # restrict the set of images we take the texels from
-            # TODO: alternative method: compute how many texels we would have (checking image sizes), then load the texel from file on demand
-            #       This approach would take longer but would fit into main memory. We could even implement a buffer of ~2000 images
-            #       to speed that method up
-            trainset = trainset if len(trainset) < self._maxTexelPics else trainset[:self._maxTexelPics]
-            extracted_texels = []
-            
-            logging.info('cutting images')
+        # restrict the set of images we take the texels from
+        # TODO: alternative method: compute how many texels we would have (checking image sizes), then load the texel from file on demand
+        #       This approach would take longer but would fit into main memory. We could even implement a buffer of ~2000 images
+        #       to speed that method up
+        trainset = trainset if len(trainset) < self.maxTexelPics else trainset[:self.maxTexelPics]
+        extracted_texels = []
         
-            for img in trainset:
-                extracted_texels += Features.cutimage(self.read_img(img), self.feature_border)
+        logging.info('cutting images')
+    
+        for path in trainset:
+            img = Image.open(path)
+            data = np.array(img)
+            img.close()
+            extracted_texels += Features.cutimage(data, self.feature_border)
+    
+        self.mytimer.tick()
         
-            logging.info("Size of self: %d", getsizeof(self))
-            self.mytimer.tick()
-            
-            logging.info('{0} potential features'.format(len(extracted_texels)))
-            logging.info('updating feature list')
-            
-            self.texel_features = Features.update_feature_list(self.texel_features, extracted_texels, self.distance_threshold, self.max_num_of_texels)
-            
-            logging.info('{0} features after update'.format(len(self.texel_features)))
-            
-            self.mytimer.tick()
-            
-            logging.info('INTEGRATION DONE')
-                    
-            # self.texel_features = np.asarray(self.texel_features, np.float32)
+        logging.info('{0} potential features'.format(len(extracted_texels)))
+        logging.info('updating feature list')
+        
+        self.texel_features = Features.update_feature_list(self.texel_features, extracted_texels, self.distance_threshold, self.num_features)
+        
+        logging.info('{0} features after update'.format(len(self.texel_features)))
+        
+        self.mytimer.tick()
+        
+        logging.info('INTEGRATION DONE')
+                
+        # self.texel_features = np.asarray(self.texel_features, np.float32)
 
     def display_data(self):
 
-        if(self.display_features_bit):
-            logging.info('DISPLAYING TEXELS')
-    
-            Features.show_texel_list(self.texel_features)
-            self.mytimer.tick()
-    
-            logging.info('DISPLAYING DONE')
+        logging.info('DISPLAYING TEXELS')
 
-    def read_img(self, path):
-        img = Image.open(path)
-        data = np.array(img)
-        img.close()
-        return data
+        Features.show_texel_list(self.texel_features)
+        self.mytimer.tick()
 
-    def compute_vectors(self):
-        if(not self.compute_vectors_bit):
-            return
+        logging.info('DISPLAYING DONE')
 
-        logging.info('COMPUTING VECTORS')
 
-        trainset = self._dataprovider.TrainData
-        trainlabels = self._dataprovider.TrainLabels
+    def extract(self, trainset):
+
         n = len(trainset)
+        logging.info("COMPUTING %d VECTORS", n)
 
         nCores = mp.cpu_count()
         pool = mp.Pool(nCores)
-        results = []
-        numres = (0,0)
+        asyncres = []
         for i in xrange(0, n):
-            resultflag = 0 if trainlabels[i] == self._dataprovider.DogLabel else 1
-            if numres[resultflag] > self.max_num_of_vectors:
-                continue
-            results.append((pool.apply_async(compute_features, [trainset[i], self.texel_features]), resultflag))
+            asyncres.append(pool.apply_async(compute_features, [trainset[i], self.texel_features]))
 
+        results = []
         i = 0
-        for r in results:
-            affectedVec = self.dog_vectors if r[1] == 0 else self.cat_vectors
-            affectedVec.append(r[0].get())
+        for r in asyncres:
+            results.append(r.get())
             i += 1
             if i % 50 == 0:
-                logging.info("Created a total of %d vectors...", i)
+                logging.info("working... already created a total of %d vectors", i)
                 self.mytimer.tick()
 
         pool.close()
         pool.join()
         self.mytimer.tick()
-        logging.info('VECTORS DONE - generated {0} dog vectors and {1} cat vectors'.format(len(self.dog_vectors), len(self.cat_vectors)))
+        logging.info("VECTORS DONE - generated %d vectors", len(results))
+        return results
 
-    def store_data(self, catPath = "", dogPath = "", featuresPath =""):
-        catPath = catPath or self.CAT_FEATURES_FILE
-        dogPath = dogPath or self.DOG_FEATURES_FILE
-        featuresPath = featuresPath or self.EXTRACTOR_DATA_FILE
-
-        if(self.store_data_bit):
-            logging.info('STORING TEXEL FEATURES')
-    
-            SavePickleFile(featuresPath, self.texel_features)
-            self.mytimer.tick()
-    
-            logging.info('STORING DOG VECTORS')
-            SavePickleFile(dogPath, self.dog_vectors)
-            self.mytimer.tick()
-    
-            logging.info('STORING CAT VECTORS')
-            SavePickleFile(catPath, self.cat_vectors)
-            self.mytimer.tick()
-
-        logging.info('STORING DONE')
-
-    def load_test(self):
-
-        if(self.load_test_bit):
-            logging.info('LOAD TEST FOR STORED DATA')
-            feats = LoadPickleFile(self.EXTRACTOR_DATA_FILE)
-            # print 'Features: {}'.format(feats)
-            logging.info("feature 2", feats[2])
-            logging.info("feature 12", feats[12])
-            logging.info("feature 34", feats[19])
-            dogs = LoadPickleFile(self.DOG_FEATURES_FILE)
-            # print 'Dogs: {}'.format(dogs)
-            logging.info("dogs 2", dogs[2])
-            logging.info("dogs 4", dogs[4])
-            logging.info("dogs 7", dogs[7])
-            cats = LoadPickleFile(self.CAT_FEATURES_FILE)
-            # print 'Cats: {}'.format(cats)
-            logging.info("cats 1", cats[1])
-            logging.info("cats 4", cats[4])
-            logging.info("cats 6", cats[6])
-    
-    def extraction_run(self):
-        
-        self.load_data()
-        #self.integrate_data()
-        self.display_data()
-        self.compute_vectors()
-        self.store_data()
-        #self.load_test()       
-
-        logging.info('END')
+    def saveState(self):
+        state = (self.texel_features, self.feature_border, self.distance_threshold, self.num_features, self.maxTexelPics)
+        return state

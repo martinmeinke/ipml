@@ -1,26 +1,26 @@
 import logging
-from os import path
 from LoggingSetup import LoggingSetup
-from SavedFeatureProvider import SavedFeatureProvider
+from FeatureProvider import FeatureProvider
 from DataProvider import DataProvider
 
+from FeatureExtraction.FeatureClass import FeatureExtractor
 from svm.SVMClassifier import SVMClassifier
 
 class IMPLRunConfiguration(object):
     
     def __init__(self):
         self.CreateDataSetPartitioning = False # create a new train/validation data segmentation or load the existing
-        self.DataSegmentation = (0.6, 0.2, 0.2) # how much of the labeled data should be used as the train/validation/test set 
         self.SaveDataSetPartitioning = False # should we save the (probably newly created) data segmentation or not
+        self.DataSegmentation = DataProvider.DEFAULT_SEGMENTATION # how much of the labeled data should be used as the train/validation/test set
+        self.DataProviderMax = DataProvider.MAXFILES # upper limit of files to be taken into consideration
         self.RawDataDir = DataProvider.RAWDATADIR # where we can find the raw data
         self.CatDataPrefix = DataProvider.CAT_DATAPREFIX # the prefix of the cat files
         self.DogDataPrefix = DataProvider.DOG_DATAPREFIX # the prefix of the dog files
+        self.CatLabel = DataProvider.CAT_LABEL # int label used for cat data
+        self.DogLabel = DataProvider.DOG_LABEL # int label used for dog data
         
         self.ExtractFeatures = False # should we extract the features or load from file
         self.SaveExtractedFeatures = False # if the features were extracted: should we save them to file
-        self.SavedCatFeaturesFile = SavedFeatureProvider.CAT_FEATURES_FILE # file with cat features to be loaded
-        self.SavedDogFeaturesFile = SavedFeatureProvider.DOG_FEATURES_FILE # file with dog features to be loaded
-        self.SavedExtractorDataFile = SavedFeatureProvider.EXTRACTOR_DATA_FILE  # file with extractor data to be loaded
         self.FeatureExtractionArgs = {} # args for the feature extractor
 
         # Actually, the important parameters
@@ -79,28 +79,19 @@ class IMPLDriver(object):
             logging.info("FeatureProvider already initialized")
             return
 
-        # check if we should load from file
-        featurefiles = (self.Setup.SavedCatFeaturesFile, self.Setup.SavedDogFeaturesFile, self.Setup.SavedExtractorDataFile)
-        if not self.Setup.ExtractFeatures:
-            logging.info("Loading saved features from '%s', '%s', and '%s'", *featurefiles)
-            self.FeatureProvider = SavedFeatureProvider(*featurefiles)
-            logging.info("Start to load SavedFeatureProvider")
-            self.FeatureProvider.load(self.Setup.DataSegmentation[1]) # TODO: remove this workaround
-            return
-
-        # shit's getting real, we extract the features as we go!
-        logging.warn("No support for extracting features from the driver, yet.") # for now
-        self.FeatureProvider = None
-        # TODO: support for the "real" feature extractor 
-        # self.FeatureExtractor = FeatureExtractor()
-        # self.FeatureProvider = FeatureProvider(_self.DataProvider, self.FeatureExtractor)
-        # logging.info("Load the FeatureExtractor based FeatureProvider")
-        # self.FeatureProvider.load(self.Setup.FeatureExtractionArgs)
+        self.FeatureExtractor = FeatureExtractor(**self.Setup.FeatureExtractionArgs)
+        self.FeatureProvider = FeatureProvider(self.DataProvider, self.FeatureExtractor)
+        logging.info("Load the FeatureExtractor based FeatureProvider")
+        if self.Setup.ExtractFeatures:
+            # shit's getting real, we extract the features as we go!
+            self.FeatureProvider.initialize()
+        else:
+            # we chill and load stuff simply from file
+            self.FeatureProvider.loadFromFile()
 
         if self.Setup.SaveExtractedFeatures:
-            logging.info("Saving extracted features to files '%s', '%s', and '%s'", *featurefiles)
-            logging.warn("No support for saving features, yet.") # for now
-            # self.FeatureProvider.save(*featurefiles)
+            logging.info("Saving extracted features to file")
+            self.FeatureProvider.saveToFile()
 
 
     def _initDataProvider(self):
@@ -110,12 +101,12 @@ class IMPLDriver(object):
         if self.DataProvider:
             logging.info("DataProvider already initialized")
             return
-        self.DataProvider = DataProvider(self.Setup.RawDataDir, self.Setup.CatDataPrefix, self.Setup.DogDataPrefix)
+        self.DataProvider = DataProvider(self.Setup.CatLabel, self.Setup.DogLabel, self.Setup.RawDataDir, self.Setup.CatDataPrefix, self.Setup.DogDataPrefix)
 
         # create new data segmentation or load from file?
         if self.Setup.CreateDataSetPartitioning:
             logging.info("Loading data provider with validation data portion of {}".format(self.Setup.DataSegmentation))
-            self.DataProvider.load(self.Setup.DataSegmentation)
+            self.DataProvider.initialize(self.Setup.DataSegmentation, self.Setup.DataProviderMax)
         else:
             logging.info("Loading data provider from file")
             self.DataProvider.loadFromFile()
@@ -146,12 +137,11 @@ class IMPLDriver(object):
             logging.info("RESULT of %s", msg)
             print msg
         return errorRate
-        # TODO: well we should now actually call the classifier to check a test set
-        # classifier.classify()
+        # TODO: do the same as validation but with test set. so classifier.testTestSet()
 
 
 
-if __name__ == "__main__":
+def main():
     # this configuration doesn't extract features, but only runs the SVM with training and validation test
     trainSVMandValidate = IMPLRunConfiguration()
     trainSVMandValidate.RunSVM = True
@@ -164,18 +154,55 @@ if __name__ == "__main__":
     loadSVMandValidate.SaveTraining = False
     
 
-    # don't run a classifier, just extract the features and save them to file
-    extractAndSaveFeatures = IMPLRunConfiguration()
-    extractAndSaveFeatures.ExtractFeatures = True
-    extractAndSaveFeatures.SaveExtractedFeatures = True
-    extractAndSaveFeatures.FeatureExtractionArgs = {}
-    
     # create and save a data segmentation
     segmentDataAndSaveSegmentation = IMPLRunConfiguration()
     segmentDataAndSaveSegmentation.ExtractFeatures = False
-    segmentDataAndSaveSegmentation.DataSegmentation = (70, 15, 15)
     segmentDataAndSaveSegmentation.CreateDataSetPartitioning = True
     segmentDataAndSaveSegmentation.SaveDataSetPartitioning = True
+    
+    # just make a few features for testing an save them
+    testExtractSomeFeaturesAndSave = IMPLRunConfiguration()
+    testExtractSomeFeaturesAndSave.CreateDataSetPartitioning = True
+    testExtractSomeFeaturesAndSave.DataProviderMax = 200 # just consider 200 files
+    testExtractSomeFeaturesAndSave.SaveDataSetPartitioning = True
+    testExtractSomeFeaturesAndSave.ExtractFeatures = True
+    testExtractSomeFeaturesAndSave.SaveExtractedFeatures = True
+    testExtractSomeFeaturesAndSave.FeatureExtractionArgs = {
+        'num_features' : 100 # just consider 100 features
+    }
+    
+    # test segmentation, extraction with few features and run svm
+    testSegmentExtractSVM = IMPLRunConfiguration()
+    testSegmentExtractSVM.CreateDataSetPartitioning = True
+    testSegmentExtractSVM.DataProviderMax = 200 # just consider 200 files
+    testSegmentExtractSVM.SaveDataSetPartitioning = True
+    testSegmentExtractSVM.ExtractFeatures = True
+    testSegmentExtractSVM.SaveExtractedFeatures = True
+    testSegmentExtractSVM.FeatureExtractionArgs = {
+        'num_features' : 100 # just consider 100 features
+    }
+    testSegmentExtractSVM.RunSVM = True
+    testSegmentExtractSVM.SaveTraining = True
+    
+    # generate some real and useful features
+    generateAndSaveFeatures = IMPLRunConfiguration()
+    generateAndSaveFeatures.CreateDataSetPartitioning = True
+    generateAndSaveFeatures.DataProviderMax = 12000 # 1200 files
+    generateAndSaveFeatures.SaveDataSetPartitioning = True
+    generateAndSaveFeatures.ExtractFeatures = True
+    generateAndSaveFeatures.SaveExtractedFeatures = True
+    generateAndSaveFeatures.FeatureExtractionArgs = {
+        'num_features' : 1000
+    }
+
 
     driver = IMPLDriver()
-    driver.run(trainSVMandValidate)
+    # log exceptions and throw them again
+    try:
+        driver.run(loadSVMandValidate)
+    except Exception as e:
+        logging.exception(str(e))
+        raise e
+
+if __name__ == "__main__":
+    main()

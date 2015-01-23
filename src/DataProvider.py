@@ -16,10 +16,12 @@ class DataProvider(object):
     CAT_DATAPREFIX = "cat"
     DOG_DATAPREFIX = "dog"
     IMG_EXT = "jpg"
-    CAT_LABEL = -1
-    DOG_LABEL = 1
     SAVEPATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data_segmentation")
     DEFAULT_SEGMENTATION = (70, 15, 15)
+    MAXFILES = -1
+    
+    CAT_LABEL = -1
+    DOG_LABEL = 1
 
     def __init__(self, catLabel = None, dogLabel = None, rawDataDir = "", catDataPrefix = "", dogDataPrefix = ""):
         self.CatLabel = catLabel if catLabel != None else self.CAT_LABEL # don't use "or" syntax to allow 0 as value
@@ -34,8 +36,9 @@ class DataProvider(object):
         self.TestData = None
         self.TestLabels = None
 
-    def load(self, segmentation = None):
+    def initialize(self, segmentation = None, maxfiles = 0):
         segmentation = segmentation or self.DEFAULT_SEGMENTATION
+        maxfiles = maxfiles or self.MAXFILES
         # normalize segmentation
         segmentation = map(lambda x : float(x) / sum(segmentation), segmentation)
 
@@ -49,6 +52,9 @@ class DataProvider(object):
         # because of the limits of the pseudo random number generator. doing it twice we at least increase the chances for more randomness
         random.shuffle(labeledfiles)
         random.shuffle(labeledfiles)
+        
+        if maxfiles > 0 and len(labeledfiles) > maxfiles:
+            del labeledfiles[maxfiles:]
 
         nData = len(labeledfiles)
         nTrain = int(segmentation[0] * nData)

@@ -17,7 +17,6 @@ from Utility import TimeManager
 def compute_features(path, features):
     img = Image.open(path)
     data = np.asarray(img, np.float32)
-    img.close()
     return Vectors.compute_feature_vector(data, features)
 
 def extract_texels(trainset, border, distance_threshold, num_features, logger, pipe):
@@ -28,7 +27,6 @@ def extract_texels(trainset, border, distance_threshold, num_features, logger, p
     for path in trainset:
         img = Image.open(path)
         data = np.array(img)
-        img.close()
         texels += Features.cutimage(data, border)
 
     tm.tick()

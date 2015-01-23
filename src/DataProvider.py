@@ -72,9 +72,9 @@ class DataProvider(object):
     def saveToFile(self, path = ""):
         path = path or self.SAVEPATH
         logging.info("Saving data segmentation")
-        SavePickleFile(self.SAVEPATH, (self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels))
+        SavePickleFile(path, (self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels))
 
     def loadFromFile(self, path = ""):
         path = path or self.SAVEPATH
         logging.info("Loading data segmentation")
-        self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels = LoadPickleFile(self.SAVEPATH)
+        self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels = LoadPickleFile(path)

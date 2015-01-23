@@ -45,10 +45,10 @@ class FeatureProvider(object):
         path = path or self.SAVEPATH
         extractorState = self._featureExtrator.saveState()
         logging.info("Saving extracted features")
-        SavePickleFile(self.SAVEPATH, (self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels, extractorState))
+        SavePickleFile(path, (self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels, extractorState))
 
     def loadFromFile(self, path = ""):
         path = path or self.SAVEPATH
         logging.info("Loading extracted features")
-        self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels, extractorState = LoadPickleFile(self.SAVEPATH)
+        self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels, extractorState = LoadPickleFile(path)
         self._featureExtrator.loadState(extractorState)

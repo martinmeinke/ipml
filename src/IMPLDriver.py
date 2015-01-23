@@ -200,11 +200,18 @@ def main():
         'max_texel_pics' : 5000
     }
 
+    runSVMWith8000_500 = IMPLRunConfiguration()
+    runSVMWith8000_500.RunSVM = True
+    runSVMWith8000_500.SaveTraining = True
+    runSVMWith8000_500.CreateDataSetPartitioning = False
+    runSVMWith8000_500.ExtractFeatures = False
+    runSVMWith8000_500.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.500.gz")
+    runSVMWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
 
     driver = IMPLDriver()
     # log exceptions and throw them again
     try:
-        driver.run(trainSVMandValidate)
+        driver.run(runSVMWith8000_500)
     except Exception as e:
         logging.exception(str(e))
         raise

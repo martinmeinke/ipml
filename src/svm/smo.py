@@ -39,6 +39,7 @@ class optStruct:
         self.b = 0
         self.eCache = mat(zeros((self.m,2))) #first column is valid flag
         self.K = mat(zeros((self.m,self.m)))
+        logging.info("Applying kernel transformation to data")
         for i in range(self.m):
             self.K[:,i] = kernelTrans(self.X, self.X[i,:], kTup)
 
@@ -116,18 +117,21 @@ def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Pl
     oS = optStruct(dataMatIn,classLabels,C,toler, kTup)
     iter = 0
     entireSet = True; alphaPairsChanged = 0
+    logging.info("Starting main loop")
     while iter < maxIter and (alphaPairsChanged > 0 or entireSet):
         alphaPairsChanged = 0
         if entireSet:   #go over all
             for i in range(oS.m):
                 alphaPairsChanged += innerL(i,oS)
-                logger.info("fullSet, iter: %d i:%d, pairs changed %d" % (iter,i,alphaPairsChanged))
+                if i % 50 == 0:
+                    logger.info("fullSet, iter: %d i:%d, pairs changed %d" % (iter,i,alphaPairsChanged))
             iter += 1
         else: #go over non-bound (railed) alphas
             nonBoundIs = nonzero((oS.alphas.A > 0) * (oS.alphas.A < C))[0]
             for i in nonBoundIs:
                 alphaPairsChanged += innerL(i,oS)
-                logger.info("non-bound, iter: %d i:%d, pairs changed %d" % (iter,i,alphaPairsChanged))
+                if i % 50 == 0:
+                    logger.info("non-bound, iter: %d i:%d, pairs changed %d" % (iter,i,alphaPairsChanged))
             iter += 1
         if entireSet:
             entireSet = False #toggle entire set loop
@@ -135,36 +139,3 @@ def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Pl
             entireSet = True
         logger.info("iteration number: %d" % iter)
     return oS.b,oS.alphas
-
-def calcWs(alphas,dataArr,classLabels):
-    X = mat(dataArr); labelMat = mat(classLabels).transpose()
-    m,n = shape(X)
-    w = zeros((n,1))
-    for i in range(m):
-        w += multiply(alphas[i]*labelMat[i],X[i,:].T)
-    return w
-
-def img2vector(filename):
-    returnVect = zeros((1,1024))
-    fr = open(filename)
-    for i in range(32):
-        lineStr = fr.readline()
-        for j in range(32):
-            returnVect[0,32*i+j] = int(lineStr[j])
-    return returnVect
-
-def loadImages(dirName):
-    from os import listdir
-    hwLabels = []
-    trainingFileList = listdir(dirName) #load the training set
-    m = len(trainingFileList)
-    trainingMat = zeros((m,1024))
-    for i in range(m):
-        fileNameStr = trainingFileList[i]
-        fileStr = fileNameStr.split('.')[0] #take off .txt
-        classNumStr = int(fileStr.split('_')[0])
-        if classNumStr == 9: hwLabels.append(-1)
-        else: hwLabels.append(1)
-        trainingMat[i,:] = img2vector('%s/%s' % (dirName, fileNameStr))
-    return trainingMat, hwLabels
-

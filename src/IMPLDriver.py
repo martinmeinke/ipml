@@ -1,5 +1,6 @@
 import os
 import logging
+import copy
 from LoggingSetup import LoggingSetup
 from FeatureProvider import FeatureProvider
 from DataProvider import DataProvider
@@ -49,10 +50,10 @@ class IMPLDriver(object):
         self.FeatureProvider = None
         self.FeatureExtractor = None
         self.DataProvider = None
+        LoggingSetup().setup()
     
     def run(self, setup):
         self.Setup = setup
-        LoggingSetup().setup()
         self._initDataProvider()
         self._initFeatureProvider()
         
@@ -90,7 +91,7 @@ class IMPLDriver(object):
             self.FeatureProvider.initialize()
         else:
             # we chill and load stuff simply from file
-            self.FeatureProvider.loadFromFile(self.Setup.FeatureSavePath)
+            self.FeatureProvider.loadFromFile(self.Setup.FeatureSavePath, self.Setup.DataProviderMax)
 
         if self.Setup.SaveExtractedFeatures:
             logging.info("Saving extracted features to file")
@@ -112,7 +113,7 @@ class IMPLDriver(object):
             self.DataProvider.initialize(self.Setup.DataSegmentation, self.Setup.DataProviderMax)
         else:
             logging.info("Loading data provider from file")
-            self.DataProvider.loadFromFile(self.Setup.DataSavePath)
+            self.DataProvider.loadFromFile(self.Setup.DataSavePath, self.Setup.DataProviderMax)
 
         # save to file if we want to
         if self.Setup.SaveDataSetPartitioning:
@@ -142,13 +143,27 @@ class IMPLDriver(object):
         return errorRate
         # TODO: do the same as validation but with test set. so classifier.testTestSet()
 
-
+def runDriver(*configurations):
+    driver = IMPLDriver()
+    logging.info("Running %d different configuration(s)" % len(configurations))
+    i = 0
+    for conf in configurations:
+        logging.info("-------------")
+        logging.info("Run config %d", i)
+        logging.info("-------------")
+        # log exceptions and throw them again
+        try:
+            driver.run(conf)
+        except Exception as e:
+            logging.exception(str(e))
+        i += 1
 
 def main():
     # this configuration doesn't extract features, but only runs the SVM with training and validation test
     trainSVMandValidate = IMPLRunConfiguration()
     trainSVMandValidate.RunSVM = True
     trainSVMandValidate.SaveTraining = True
+    trainSVMandValidate.DataProviderMax = 5000
     
     # simply load the last training and run the validation test
     loadSVMandValidate = IMPLRunConfiguration()
@@ -217,14 +232,20 @@ def main():
     loadRFandValidate.RunRF = True
     loadRFandValidate.LoadTraining = True
     loadRFandValidate.SaveTraining = False
+    
+    svmArgs = [
+        dict(C=0.01, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=1, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=10, maxIter=5, kTup=('rbf', 1.3))
+    ]
+    trainSVMConfs = []    
+    for args in svmArgs:
+        conf = copy.copy(runSVMWith8000_500)
+        conf.DataProviderMax = 5000
+        conf.SVMArgs = args
+        trainSVMConfs.append(conf)
 
-    driver = IMPLDriver()
-    # log exceptions and throw them again
-    try:
-        driver.run(trainRFandValidate)
-    except Exception as e:
-        logging.exception(str(e))
-        raise
+    runDriver(*trainSVMConfs)
     
 if __name__ == "__main__":
     main()

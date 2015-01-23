@@ -46,3 +46,16 @@ def SavePickleFile(path, data):
     pickle.dump(data, f)
     f.close()
     logging.info("Saved data to '%s'", path)
+
+def LimitDataSets(datasets, sumlimit):
+    logging.info("Limiting data to a total of %d", sumlimit)
+    segmentation = map(len, datasets)
+    logging.info("Set lengths before: %s", str(segmentation))
+    segmentation = map(lambda x : float(x) / sum(segmentation), segmentation)
+    limited = []
+    for i in range(0, len(datasets)):
+        limit = int(sumlimit * segmentation[i])
+        limited.append(datasets[i][:limit] if limit < len(datasets[i]) else datasets[i])
+    logging.info("Set lengths after: %s", str(map(len, limited)))
+    return limited
+

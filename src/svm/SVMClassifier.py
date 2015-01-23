@@ -1,4 +1,5 @@
 
+import logging
 from smo import smoP, kernelTrans
 from numpy import nonzero, shape, multiply, sign
 from Classifier import Classifier
@@ -24,6 +25,7 @@ class SVMClassifier(Classifier):
         self.Training = None
 
     def train(self, C=200, toler=0.0001, maxIter=1000, kTup=('rbf', 1.3)):
+        logging.info("SVM Parameters: C=%f, toler=%f, maxIter=%d, kTup=%s", C, toler, maxIter, str(kTup))
         self.Training = SVMTraining()
         # actual training
         self.Training.B, self.Training.Alphas = smoP(self._fp.TrainData, self._fp.TrainLabels, C, toler, maxIter, kTup);

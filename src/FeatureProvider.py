@@ -13,7 +13,7 @@ class FeatureProvider(object):
     Each *Data member will be an m*n matrix with m data points and n features.
     The *Labels member will be an m*1 matrix with the labels corresponding to the m data points
     """
-    SAVEPATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../extracted_features")
+    SAVEPATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../saved/extracted_features")
 
     def __init__(self, dataprovider, FeatureExtractor):
         self._dataprovider = dataprovider

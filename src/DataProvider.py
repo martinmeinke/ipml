@@ -16,7 +16,7 @@ class DataProvider(object):
     CAT_DATAPREFIX = "cat"
     DOG_DATAPREFIX = "dog"
     IMG_EXT = "jpg"
-    SAVEPATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data_segmentation")
+    SAVEPATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../saved/data_segmentation")
     DEFAULT_SEGMENTATION = (70, 15, 15)
     MAXFILES = -1
     

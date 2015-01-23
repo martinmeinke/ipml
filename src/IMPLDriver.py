@@ -202,7 +202,7 @@ def main():
     driver = IMPLDriver()
     # log exceptions and throw them again
     try:
-        driver.run(loadSVMandValidate)
+        driver.run(trainSVMandValidate)
     except Exception as e:
         logging.exception(str(e))
         raise

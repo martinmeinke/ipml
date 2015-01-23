@@ -39,6 +39,9 @@ def LoadPickleFile(path):
         raise Exception(msg)
         
 def SavePickleFile(path, data):
+    dirpath = os.path.dirname(path)
+    if not os.path.exists(dirpath):
+        os.mkdir(dirpath)
     f = gzip.open(path, 'wb')
     pickle.dump(data, f)
     f.close()

@@ -7,11 +7,13 @@ import numpy as np
 import logging
 from PIL import Image
 import multiprocessing as mp
+from datetime import datetime, timedelta
 
 # import files
 import Features
 import Vectors
 from Utility import TimeManager
+from scalar.basic import second
 
 def compute_features(path, features):
     img = Image.open(path)
@@ -58,7 +60,7 @@ class FeatureExtractor(object):
         self.num_features = num_features or self.NUM_FEATURES
         self.maxTexelPics = max_texel_pics or self.MAX_TEXEL_PICS
         
-        self.mytimer = TimeManager()
+        self.mytimer = TimeManager(logging.getLogger())
 
     def loadState(self, state):
         self.texel_features, self.feature_border, self.distance_threshold, self.num_features, self.maxTexelPics = state
@@ -111,12 +113,17 @@ class FeatureExtractor(object):
             asyncres.append(pool.apply_async(compute_features, [trainset[i], self.texel_features]))
 
         results = []
+        workingTimer = TimeManager()
         i = 0
         for r in asyncres:
             results.append(r.get())
             i += 1
             if i % 50 == 0:
                 logging.info("working... already created a total of %d vectors", i)
+                workingTimer.tick()
+                estimatedLeft = float(workingTimer.elapsed_time) / i * (n-i)
+                eta = datetime.now() + timedelta(second=int(estimatedLeft))
+                logging.info("  about %.2f seconds left for this vector set. Estimated end: %s", estimatedLeft, eta.strftime("%H:%M:%S"))
                 self.mytimer.tick()
 
         pool.close()

@@ -16,12 +16,14 @@ class IMPLRunConfiguration(object):
         self.RawDataDir = DataProvider.RAWDATADIR # where we can find the raw data
         self.CatDataPrefix = DataProvider.CAT_DATAPREFIX # the prefix of the cat files
         self.DogDataPrefix = DataProvider.DOG_DATAPREFIX # the prefix of the dog files
+        self.DataSavePath = DataProvider.SAVEPATH
         self.CatLabel = DataProvider.CAT_LABEL # int label used for cat data
         self.DogLabel = DataProvider.DOG_LABEL # int label used for dog data
         
         self.ExtractFeatures = False # should we extract the features or load from file
         self.SaveExtractedFeatures = False # if the features were extracted: should we save them to file
         self.FeatureExtractionArgs = {} # args for the feature extractor
+        self.FeatureSavePath = FeatureProvider.SAVEPATH
 
         # Actually, the important parameters
         self.RunCNN = False # run the convolutional neural network?
@@ -87,11 +89,11 @@ class IMPLDriver(object):
             self.FeatureProvider.initialize()
         else:
             # we chill and load stuff simply from file
-            self.FeatureProvider.loadFromFile()
+            self.FeatureProvider.loadFromFile(self.Setup.FeatureSavePath)
 
         if self.Setup.SaveExtractedFeatures:
             logging.info("Saving extracted features to file")
-            self.FeatureProvider.saveToFile()
+            self.FeatureProvider.saveToFile(self.Setup.FeatureSavePath)
 
 
     def _initDataProvider(self):
@@ -109,12 +111,12 @@ class IMPLDriver(object):
             self.DataProvider.initialize(self.Setup.DataSegmentation, self.Setup.DataProviderMax)
         else:
             logging.info("Loading data provider from file")
-            self.DataProvider.loadFromFile()
+            self.DataProvider.loadFromFile(self.Setup.DataSavePath)
 
         # save to file if we want to
         if self.Setup.SaveDataSetPartitioning:
             logging.info("Save DataProvider to file")
-            self.DataProvider.saveToFile()
+            self.DataProvider.saveToFile(self.Setup.DataSavePath)
 
     def _runClassifier(self, classifier, classifierKwargs):
         if self.Setup.LoadTraining:

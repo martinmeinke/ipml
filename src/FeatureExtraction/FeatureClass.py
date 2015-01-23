@@ -3,7 +3,6 @@ Created on Jan 15, 2015
 
 @author: patrik
 '''
-import os
 import numpy as np
 import logging
 from PIL import Image
@@ -19,6 +18,31 @@ def compute_features(path, features):
     data = np.asarray(img, np.float32)
     img.close()
     return Vectors.compute_feature_vector(data, features)
+
+def extract_texels(trainset, border, distance_threshold, num_features, logger, pipe):
+    texels = []
+    tm = TimeManager(logger)
+    logger.info("sp> Extracting texels in different process")
+
+    for path in trainset:
+        img = Image.open(path)
+        data = np.array(img)
+        img.close()
+        texels += Features.cutimage(data, border)
+
+    tm.tick()
+    logger.info('sp> {0} potential features'.format(len(texels)))
+    logger.info('sp> updating feature list')
+    
+    features = []
+    features = Features.update_feature_list(features, texels, distance_threshold, num_features)
+
+    logger.info('sp> {0} features after update'.format(len(features)))
+    tm.tick()
+
+    logger.info("sp> Sending features to pipe")
+    pipe.send(features)
+    pipe.close()
 
 class FeatureExtractor(object):
     DISTANCE_THRESHOLD = 100
@@ -49,30 +73,22 @@ class FeatureExtractor(object):
         #       This approach would take longer but would fit into main memory. We could even implement a buffer of ~2000 images
         #       to speed that method up
         trainset = trainset if len(trainset) < self.maxTexelPics else trainset[:self.maxTexelPics]
-        extracted_texels = []
         
         logging.info('cutting images')
-    
-        for path in trainset:
-            img = Image.open(path)
-            data = np.array(img)
-            img.close()
-            extracted_texels += Features.cutimage(data, self.feature_border)
-    
-        self.mytimer.tick()
-        
-        logging.info('{0} potential features'.format(len(extracted_texels)))
-        logging.info('updating feature list')
-        
-        self.texel_features = Features.update_feature_list(self.texel_features, extracted_texels, self.distance_threshold, self.num_features)
-        
-        logging.info('{0} features after update'.format(len(self.texel_features)))
-        
+        # Workaround: Python seems to keep internal "free lists" of float values. Extracting the texels
+        #             allocates very very much memory without freeing it. Presumably this is because of cached
+        #             floats in the float free list. A known workaround is letting a subprocess doing this work
+        #             and reading only the features from that process
+
+        parentpipe, childpipe = mp.Pipe()
+        p = mp.Process(target=extract_texels, args=(trainset, self.feature_border, self.distance_threshold, self.num_features, logging.getLogger(), childpipe))
+        p.start()
+        p.join()
+        logging.info("Reading features from pipe")
+        self.texel_features = parentpipe.recv()
         self.mytimer.tick()
         
         logging.info('INTEGRATION DONE')
-                
-        # self.texel_features = np.asarray(self.texel_features, np.float32)
 
     def display_data(self):
 
@@ -82,7 +98,6 @@ class FeatureExtractor(object):
         self.mytimer.tick()
 
         logging.info('DISPLAYING DONE')
-
 
     def extract(self, trainset):
 

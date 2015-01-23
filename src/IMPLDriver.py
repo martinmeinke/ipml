@@ -187,22 +187,23 @@ def main():
     # generate some real and useful features
     generateAndSaveFeatures = IMPLRunConfiguration()
     generateAndSaveFeatures.CreateDataSetPartitioning = True
-    generateAndSaveFeatures.DataProviderMax = 12000 # 1200 files
+    generateAndSaveFeatures.DataProviderMax = 8000 # num files to take into consideration
     generateAndSaveFeatures.SaveDataSetPartitioning = True
     generateAndSaveFeatures.ExtractFeatures = True
     generateAndSaveFeatures.SaveExtractedFeatures = True
     generateAndSaveFeatures.FeatureExtractionArgs = {
-        'num_features' : 1000
+        'num_features' : 500,
+        'max_texel_pics' : 5000
     }
 
 
     driver = IMPLDriver()
     # log exceptions and throw them again
     try:
-        driver.run(loadSVMandValidate)
+        driver.run(generateAndSaveFeatures)
     except Exception as e:
         logging.exception(str(e))
-        raise e
+        raise
 
 if __name__ == "__main__":
     main()

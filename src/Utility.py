@@ -9,7 +9,8 @@ import logging
 
 class TimeManager:
     
-    def __init__(self):
+    def __init__(self, logger = None):
+        self._logger = logger or logging.getLogger()
         self.start_time = os.times()[4]
         self.elapsed_time = 0
         self.actual_tick = 0
@@ -17,7 +18,7 @@ class TimeManager:
     def tick(self):
         self.actual_tick = os.times()[4] - self.elapsed_time-self.start_time
         self.elapsed_time = os.times()[4] - self.start_time
-        logging.info("last action: %.2fs; totally elapsed: %.2fs", self.actual_tick, self.elapsed_time)
+        self._logger.info("last action: %.2fs; totally elapsed: %.2fs", self.actual_tick, self.elapsed_time)
 
 def LoadPickleFile(path):
     """

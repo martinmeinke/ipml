@@ -69,10 +69,12 @@ class DataProvider(object):
         self.TestLabels = [x[1] for x in labeledfiles[nTrain+nValidation:]]
         logging.info("Segmentation finished.")
 
-    def saveToFile(self):
+    def saveToFile(self, path = ""):
+        path = path or self.SAVEPATH
         logging.info("Saving data segmentation")
         SavePickleFile(self.SAVEPATH, (self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels))
 
-    def loadFromFile(self):
+    def loadFromFile(self, path = ""):
+        path = path or self.SAVEPATH
         logging.info("Loading data segmentation")
         self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels = LoadPickleFile(self.SAVEPATH)

@@ -9,7 +9,6 @@ import CPP_Functions
 import logging
 from matplotlib import pyplot as plt
 from math import floor
-from sys import getsizeof
 
 
 def cutimage(image,edgesize):

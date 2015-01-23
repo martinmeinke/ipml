@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 import Features
 import Vectors
 from Utility import TimeManager
-from scalar.basic import second
 
 def compute_features(path, features):
     img = Image.open(path)
@@ -122,8 +121,9 @@ class FeatureExtractor(object):
                 logging.info("working... already created a total of %d vectors", i)
                 workingTimer.tick()
                 estimatedLeft = float(workingTimer.elapsed_time) / i * (n-i)
-                eta = datetime.now() + timedelta(second=int(estimatedLeft))
-                logging.info("  about %.2f seconds left for this vector set. Estimated end: %s", estimatedLeft, eta.strftime("%H:%M:%S"))
+                eta = datetime.now() + timedelta(seconds=int(estimatedLeft))
+                logging.info("           about %.2f seconds left for this vector set", estimatedLeft)
+                logging.info("           estimated end: %s", eta.strftime("%H:%M:%S"))
                 self.mytimer.tick()
 
         pool.close()

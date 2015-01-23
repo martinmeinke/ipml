@@ -6,6 +6,7 @@ from DataProvider import DataProvider
 
 from FeatureExtraction.FeatureClass import FeatureExtractor
 from svm.SVMClassifier import SVMClassifier
+from rf.RFClassifier import RFClassifier
 
 class IMPLRunConfiguration(object):
     PROJECT_BASEDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../")
@@ -67,11 +68,9 @@ class IMPLDriver(object):
             self._runClassifier(svm, self.Setup.SVMArgs)
 
         if self.Setup.RunRF:
-            logging.warn("No support to run RF classifier through driver, yet")
-            # TODO: support for RF 
-            # logging.info("Running Random Forest classifier")
-            # rf = RFClassifier(self.FeatureProvider)
-            # self._runClassifier(rf, self.Setup.RFArgs)
+            logging.info("Running Random Forest classifier")
+            rf = RFClassifier(self.FeatureProvider)
+            self._runClassifier(rf, self.Setup.RFArgs)
 
 
     def _initFeatureProvider(self):
@@ -156,7 +155,6 @@ def main():
     loadSVMandValidate.RunSVM = True
     loadSVMandValidate.LoadTraining = True
     loadSVMandValidate.SaveTraining = False
-    
 
     # create and save a data segmentation
     segmentDataAndSaveSegmentation = IMPLRunConfiguration()
@@ -207,14 +205,26 @@ def main():
     runSVMWith8000_500.ExtractFeatures = False
     runSVMWith8000_500.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.500.gz")
     runSVMWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
+    
+    
+    # this configuration doesn't extract features, but only runs the RF with training and validation test
+    trainRFandValidate = IMPLRunConfiguration()
+    trainRFandValidate.RunRF = True
+    trainRFandValidate.SaveTraining = True
+    
+    # simply load the last training and run the validation test
+    loadRFandValidate = IMPLRunConfiguration()
+    loadRFandValidate.RunRF = True
+    loadRFandValidate.LoadTraining = True
+    loadRFandValidate.SaveTraining = False
 
     driver = IMPLDriver()
     # log exceptions and throw them again
     try:
-        driver.run(runSVMWith8000_500)
+        driver.run(trainRFandValidate)
     except Exception as e:
         logging.exception(str(e))
         raise
-
+    
 if __name__ == "__main__":
     main()

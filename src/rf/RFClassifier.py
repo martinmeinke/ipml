@@ -12,6 +12,7 @@ class RFClassifier(Classifier):
     def __init__(self, featureProvider):
         self._fp = featureProvider
         self.TrainingFileName = "RFTraining"
+        self.Training = None
         self.RF = None
         
     def train(self):

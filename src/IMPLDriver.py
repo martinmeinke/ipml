@@ -1,3 +1,4 @@
+import os
 import logging
 from LoggingSetup import LoggingSetup
 from FeatureProvider import FeatureProvider
@@ -7,6 +8,7 @@ from FeatureExtraction.FeatureClass import FeatureExtractor
 from svm.SVMClassifier import SVMClassifier
 
 class IMPLRunConfiguration(object):
+    PROJECT_BASEDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../")
     
     def __init__(self):
         self.CreateDataSetPartitioning = False # create a new train/validation data segmentation or load the existing

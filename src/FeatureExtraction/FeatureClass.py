@@ -47,7 +47,7 @@ def extract_texels(trainset, border, distance_threshold, num_features, logger, p
     pipe.close()
 
 class FeatureExtractor(object):
-    DISTANCE_THRESHOLD = 100
+    DISTANCE_THRESHOLD = 40
     NUM_FEATURES = 1000
     MAX_TEXEL_PICS = 5000
     

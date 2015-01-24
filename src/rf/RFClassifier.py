@@ -18,9 +18,9 @@ class RFClassifier(Classifier):
         self.Training = RandomForest(self._fp.TrainData.tolist(), self._fp.TrainLabels.tolist())
         self.Training.parallel_generate_forest()
         
-    def testValidationSet(self):
-        predictions = self.Training.predict(self._fp.ValidationData.tolist())
-        acc = self.getAccuracy(predictions, self._fp.ValidationLabels.tolist())
+    def testDataSet(self, dataSet, dataLabels):
+        predictions = self.Training.predict(dataSet.tolist())
+        acc = self.getAccuracy(predictions, dataLabels.tolist())
         return acc
     
     def getAccuracy(self, list1, list2):

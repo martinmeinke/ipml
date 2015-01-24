@@ -64,7 +64,7 @@ class RandomTree(object):
         
         for i in range(self.f_parms.MAX_TRIES):
             for attribute in attributes:
-                for threshold in self.calc_thresholds(self.find_max(train_data, data_subset, attribute), self.f_parms.NUM_THRES_STEPS):
+                for threshold in self.calc_thresholds(train_data, data_subset, attribute, self.f_parms.NUM_THRES_STEPS):
                     gain = self.calc_inf_gain(train_data, train_labels, data_subset, attribute, threshold)
                     if gain > best_gain:
                         best_gain = gain
@@ -94,16 +94,20 @@ class RandomTree(object):
     def decide(self, features):
         return self.root_node.decide(features)
     
-    def calc_thresholds(self, maximum, num_steps):
-        step_size = maximum / float(num_steps)
-        return [step_size * i for i in xrange(1, num_steps)]
+    def calc_thresholds(self, train_data, data_subset, attribute, num_steps):
+        minimum, maximum = self.calc_feature_range(train_data, data_subset, attribute)
+        step_size = (maximum - minimum) / float(num_steps)
+        return [minimum+step_size * i for i in xrange(1, num_steps)]
     
-    def find_max(self, train_data, data_subset, attribute):
-        max_value = -1
+    def calc_feature_range(self, train_data, data_subset, attribute):
+        max_val = train_data[data_subset[0]][attribute]
+        min_val = train_data[data_subset[0]][attribute]
         for item in data_subset:
-            if train_data[item][attribute] > max_value:
-                max_value = train_data[item][attribute]
-        return max_value
+            if train_data[item][attribute] > max_val:
+                max_val = train_data[item][attribute]
+            if train_data[item][attribute] < min_val:
+                min_val = train_data[item][attribute]
+        return (min_val, max_val)
     
     def calc_inf_gain(self, train_data, train_labels, data_subset, attribute, threshold):
         size = float(len(data_subset))

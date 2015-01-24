@@ -11,22 +11,32 @@ logger = logging.getLogger(__name__)
 
 class ForestParams(object):
     #TODO:optimize, not a fix number for subset, orig 100    
-    SAMPLE_SUBSET_SIZE = 1500
-    #SAMPLE_SUBSET_SIZE = 100
+    #SAMPLE_SUBSET_SIZE = 1500
+    SAMPLE_SUBSET_SIZE = 100
     
-    MIN_GAIN = 10e-5
+    #if MIN_GAIN = None no minimum gain and go until MAX_TREE_DEPTH is reached
+    #orig MIN_GAIN = 10e-5
+    MIN_GAIN = 10e-6
     #TODO:optimize, size of feature subset orig 8
-    NUM_ATTRIBUTES = 20
+    NUM_ATTRIBUTES = 8
     #NUM_ATTRIBUTES = 8
     
     #TODO:optimize, threshold steps orig 10 
-    NUM_THRES_STEPS = 40
+    NUM_THRES_STEPS = 10
     #NUM_THRES_STEPS = 10
     
     #maximum tries for testing different attribute sets to find best split
     MAX_TRIES = 10
     
-    FOREST_SIZE = 100
+    FOREST_SIZE = 10
+    
+    MAX_TREE_DEPTH = 100
+    
+    def __init__(self, num_intput, num_features):
+        self.NUM_ATTRIBUTES = int(sqrt(num_features))
+        self.SAMPLE_SUBSET_SIZE = int(num_intput*2/3)
+        
+        
 
 class RandomForest(object):
     forest = None
@@ -34,14 +44,9 @@ class RandomForest(object):
     
     def __init__(self, training_features, training_labels):
         num_input,num_features = shape(training_features)
-        self.init_params(num_input,num_features)
+        self.f_parms = ForestParams(num_input, num_features)
         self.forest = []
-        self.train_data = self.create_mapping(training_features, training_labels)
-        
-    def init_params(self, num_intput, num_features):
-        self.f_parms = ForestParams()
-        self.f_parms.NUM_ATTRIBUTES = int(num_features /3)
-        self.f_parms.SAMPLE_SUBSET_SIZE = int(sqrt(num_intput))
+        self.train_data = self.create_mapping(training_features, training_labels)        
     
     def prepare_forest(self):
         for __ in xrange(self.f_parms.FOREST_SIZE):

@@ -24,17 +24,19 @@ class RandomTree(object):
     wrapper to build the tree and set the root node
     '''
     def build_tree(self, data, attributes):
-        self.root_node = self.generate_tree(data, attributes)
+        actual_depth = 0
+        self.root_node = self.generate_tree(data, attributes, actual_depth)
         
     '''
     generates a rondomized decision tree
     '''
-    def generate_tree(self, data, attributes):
+    def generate_tree(self, data, attributes, actual_depth):
         default_val = self.get_majority_class(data)
+        actual_depth +=1
     
         #Base cases:
-        #No more data, take the majority
-        if len(data) < 2:
+        #No more data or maximal depth reached, take the majority
+        if len(data) < 2 or actual_depth > self.f_parms.MAX_TREE_DEPTH:
             root = DecisionTreeNode()
             root.set_label(default_val)
             return root
@@ -65,8 +67,8 @@ class RandomTree(object):
                         best_attribute = attribute
                         best_threshold = threshold
             
-            #if gain sufficient break
-            if(best_gain > self.f_parms.MIN_GAIN):
+            #if no minimum gain set or gain sufficient break
+            if(self.f_parms.MIN_GAIN == None or best_gain > self.f_parms.MIN_GAIN):
                 break
             #if maximum iteration not reached try new set of attributes
             elif best_gain < self.f_parms.MIN_GAIN and i < (self.f_parms.MAX_TRIES -1):
@@ -79,8 +81,8 @@ class RandomTree(object):
         #Recursive build tree
         root = DecisionTreeNode(best_attribute, best_threshold)
         yes_set, no_set = self.split_data_by_attribute(data, best_attribute, best_threshold)
-        l_child = self.generate_tree(yes_set, attributes)
-        r_child = self.generate_tree(no_set, attributes)
+        l_child = self.generate_tree(yes_set, attributes, actual_depth)
+        r_child = self.generate_tree(no_set, attributes, actual_depth)
         root.set_l_child(l_child)
         root.set_r_child(r_child)
         return root

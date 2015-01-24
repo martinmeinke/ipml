@@ -217,6 +217,14 @@ def main():
     loadRFandValidate.RunRF = True
     loadRFandValidate.LoadTraining = True
     loadRFandValidate.SaveTraining = False
+    
+    runRFWith8000_500 = IMPLRunConfiguration()
+    runRFWith8000_500.RunRF = True
+    runRFWith8000_500.SaveTraining = True
+    runRFWith8000_500.CreateDataSetPartitioning = False
+    runRFWith8000_500.ExtractFeatures = False
+    runRFWith8000_500.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.500.gz")
+    runRFWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
 
     driver = IMPLDriver()
     # log exceptions and throw them again

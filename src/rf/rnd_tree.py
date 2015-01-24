@@ -162,12 +162,6 @@ class RandomTree(object):
         sortedCounts = sorted(counts.items(), key=operator.itemgetter(1), reverse=True)
         return sortedCounts[0][0]    
     
-    def list_index_sub_sample(self, orig_list, sub_size):
-        subset = []
-        for _ in xrange(sub_size):
-            subset.append(random.randrange(0, len(orig_list)-1))
-        return subset
-
 class DecisionTreeNode:
 
     def __init__(self, feature_index=None, feature_threshold=None):

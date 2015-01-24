@@ -1,8 +1,6 @@
 from numpy import *
 import logging
 
-logger = logging.getLogger(__name__)
-
 def selectJrand(i,m):
     j=i #we want to select any J not equal to i
     while (j==i):
@@ -39,6 +37,7 @@ class optStruct:
         self.b = 0
         self.eCache = mat(zeros((self.m,2))) #first column is valid flag
         self.K = mat(zeros((self.m,self.m)))
+        logging.info("Applying kernel transformation to data")
         for i in range(self.m):
             self.K[:,i] = kernelTrans(self.X, self.X[i,:], kTup)
 
@@ -85,19 +84,19 @@ def innerL(i, oS):
         L = max(0, oS.alphas[j] + oS.alphas[i] - oS.C)
         H = min(oS.C, oS.alphas[j] + oS.alphas[i])
     if L==H:
-        logger.info("L==H")
+        logging.info("L==H")
         return 0
 
     eta = 2.0 * oS.K[i,j] - oS.K[i,i] - oS.K[j,j] #changed for kernel
     if eta >= 0:
-        logger.info("eta>=0")
+        logging.info("eta>=0")
         return 0
 
     oS.alphas[j] -= oS.labelMat[j]*(Ei - Ej)/eta
     oS.alphas[j] = clipAlpha(oS.alphas[j],H,L)
     updateEk(oS, j) #added this for the Ecache
     if abs(oS.alphas[j] - alphaJold) < 0.00001:
-        logger.info("j not moving enough")
+        logging.info("j not moving enough")
         return 0
 
     oS.alphas[i] += oS.labelMat[j]*oS.labelMat[i]*(alphaJold - oS.alphas[j])#update i by the same amount as j
@@ -114,57 +113,25 @@ def innerL(i, oS):
 
 def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Platt SMO
     oS = optStruct(dataMatIn,classLabels,C,toler, kTup)
-    iter = 0
+    iteration = 0
     entireSet = True; alphaPairsChanged = 0
-    while iter < maxIter and (alphaPairsChanged > 0 or entireSet):
+    logging.info("Starting main loop")
+    while iteration < maxIter and (alphaPairsChanged > 0 or entireSet):
         alphaPairsChanged = 0
         if entireSet:   #go over all
             for i in range(oS.m):
                 alphaPairsChanged += innerL(i,oS)
-                logger.info("fullSet, iter: %d i:%d, pairs changed %d" % (iter,i,alphaPairsChanged))
-            iter += 1
+                logging.info("fullSet, iteration: %d i:%d, pairs changed %d" % (iteration,i,alphaPairsChanged))
+            iteration += 1
         else: #go over non-bound (railed) alphas
             nonBoundIs = nonzero((oS.alphas.A > 0) * (oS.alphas.A < C))[0]
             for i in nonBoundIs:
                 alphaPairsChanged += innerL(i,oS)
-                logger.info("non-bound, iter: %d i:%d, pairs changed %d" % (iter,i,alphaPairsChanged))
-            iter += 1
+                logging.info("non-bound, iteration: %d i:%d, pairs changed %d" % (iteration,i,alphaPairsChanged))
+            iteration += 1
         if entireSet:
             entireSet = False #toggle entire set loop
         elif alphaPairsChanged == 0:
             entireSet = True
-        logger.info("iteration number: %d" % iter)
+        logging.info("iteration number: %d" % iteration)
     return oS.b,oS.alphas
-
-def calcWs(alphas,dataArr,classLabels):
-    X = mat(dataArr); labelMat = mat(classLabels).transpose()
-    m,n = shape(X)
-    w = zeros((n,1))
-    for i in range(m):
-        w += multiply(alphas[i]*labelMat[i],X[i,:].T)
-    return w
-
-def img2vector(filename):
-    returnVect = zeros((1,1024))
-    fr = open(filename)
-    for i in range(32):
-        lineStr = fr.readline()
-        for j in range(32):
-            returnVect[0,32*i+j] = int(lineStr[j])
-    return returnVect
-
-def loadImages(dirName):
-    from os import listdir
-    hwLabels = []
-    trainingFileList = listdir(dirName) #load the training set
-    m = len(trainingFileList)
-    trainingMat = zeros((m,1024))
-    for i in range(m):
-        fileNameStr = trainingFileList[i]
-        fileStr = fileNameStr.split('.')[0] #take off .txt
-        classNumStr = int(fileStr.split('_')[0])
-        if classNumStr == 9: hwLabels.append(-1)
-        else: hwLabels.append(1)
-        trainingMat[i,:] = img2vector('%s/%s' % (dirName, fileNameStr))
-    return trainingMat, hwLabels
-

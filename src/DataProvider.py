@@ -4,7 +4,7 @@ import re
 import random
 import logging
 
-from Utility import LoadPickleFile, SavePickleFile
+from Utility import LoadPickleFile, SavePickleFile, LimitDataSets
 
 class DataProvider(object):
     '''
@@ -74,7 +74,15 @@ class DataProvider(object):
         logging.info("Saving data segmentation")
         SavePickleFile(path, (self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels))
 
-    def loadFromFile(self, path = ""):
+    def loadFromFile(self, path = "", datamax = -1):
         path = path or self.SAVEPATH
         logging.info("Loading data segmentation")
         self.TrainData, self.TrainLabels, self.ValidationData, self.ValidationLabels, self.TestData, self.TestLabels = LoadPickleFile(path)
+        setLens = len(self.TrainData), len(self.ValidationData), len(self.TestData)
+        logging.info("TrainData: %d, ValidationData: %d, TestData: %d" % (setLens))
+        # limit data
+        if datamax < 1 or sum(setLens) <= datamax:
+            return
+        self.TrainData, self.ValidationData, self.TestData = LimitDataSets((self.TrainData, self.ValidationData, self.TestData), datamax)
+        self.TrainLabels, self.ValidationLabels, self.TestLabels = LimitDataSets((self.TrainLabels, self.ValidationLabels, self.TestLabels), datamax)
+

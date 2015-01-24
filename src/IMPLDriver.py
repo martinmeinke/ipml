@@ -1,5 +1,6 @@
 import os
 import logging
+import copy
 from LoggingSetup import LoggingSetup
 from FeatureProvider import FeatureProvider
 from DataProvider import DataProvider
@@ -49,10 +50,10 @@ class IMPLDriver(object):
         self.FeatureProvider = None
         self.FeatureExtractor = None
         self.DataProvider = None
+        LoggingSetup().setup()
     
     def run(self, setup):
         self.Setup = setup
-        LoggingSetup().setup()
         self._initDataProvider()
         self._initFeatureProvider()
         
@@ -90,7 +91,7 @@ class IMPLDriver(object):
             self.FeatureProvider.initialize()
         else:
             # we chill and load stuff simply from file
-            self.FeatureProvider.loadFromFile(self.Setup.FeatureSavePath)
+            self.FeatureProvider.loadFromFile(self.Setup.FeatureSavePath, self.Setup.DataProviderMax)
 
         if self.Setup.SaveExtractedFeatures:
             logging.info("Saving extracted features to file")
@@ -112,7 +113,7 @@ class IMPLDriver(object):
             self.DataProvider.initialize(self.Setup.DataSegmentation, self.Setup.DataProviderMax)
         else:
             logging.info("Loading data provider from file")
-            self.DataProvider.loadFromFile(self.Setup.DataSavePath)
+            self.DataProvider.loadFromFile(self.Setup.DataSavePath, self.Setup.DataProviderMax)
 
         # save to file if we want to
         if self.Setup.SaveDataSetPartitioning:
@@ -131,24 +132,38 @@ class IMPLDriver(object):
             logging.info("Saving training of classifier %s to file", classifier.Name)
             classifier.saveTraining()
             
-        errorRate = -1
         if self.Setup.TestValidationSet:
             logging.info("Testing the validation set with classifier %s", classifier.Name)
-            # TODO: which output do we return. and how?
-            errorRate = classifier.testValidationSet()
-            msg = "%s: Validation Test Error Rate = %s" % (classifier.Name, str(errorRate))
-            logging.info("RESULT of %s", msg)
-            print msg
-        return errorRate
-        # TODO: do the same as validation but with test set. so classifier.testTestSet()
+            self._runClassifierOnSet(classifier, "Validation", self.FeatureProvider.ValidationData, self.FeatureProvider.ValidationLabels)
+            self._runClassifierOnSet(classifier, "Test", self.FeatureProvider.TestData, self.FeatureProvider.TestLabels)
 
+    def _runClassifierOnSet(self, classifier, runname, data, labels):
+        errorRate = classifier.testDataSet(data, labels)
+        msg = "%s: %s Error Rate = %s" % (runname, classifier.Name, str(errorRate))
+        logging.info("RESULT of %s", msg)
+        print msg
 
+def runDriver(*configurations):
+    driver = IMPLDriver()
+    logging.info("Running %d different configuration(s)" % len(configurations))
+    i = 0
+    for conf in configurations:
+        logging.info("-------------")
+        logging.info("Run config %d", i)
+        logging.info("-------------")
+        # log exceptions and throw them again
+        try:
+            driver.run(conf)
+        except Exception as e:
+            logging.exception(str(e))
+        i += 1
 
 def main():
     # this configuration doesn't extract features, but only runs the SVM with training and validation test
     trainSVMandValidate = IMPLRunConfiguration()
     trainSVMandValidate.RunSVM = True
     trainSVMandValidate.SaveTraining = True
+    trainSVMandValidate.DataProviderMax = 5000
     
     # simply load the last training and run the validation test
     loadSVMandValidate = IMPLRunConfiguration()
@@ -225,14 +240,22 @@ def main():
     runRFWith8000_500.ExtractFeatures = False
     runRFWith8000_500.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.500.gz")
     runRFWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
+    
+    svmArgs = [
+        dict(C=5, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=10, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=15, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=20, maxIter=5, kTup=('rbf', 1.3)),
+    ]
+    trainSVMConfs = []    
+    for args in svmArgs:
+        conf = copy.copy(runSVMWith8000_500)
+        conf.DataProviderMax = 5000
+        conf.SVMArgs = args
+        trainSVMConfs.append(conf)
 
-    driver = IMPLDriver()
-    # log exceptions and throw them again
-    try:
-        driver.run(trainRFandValidate)
-    except Exception as e:
-        logging.exception(str(e))
-        raise
+    runDriver(loadRFandValidate)
+
     
 if __name__ == "__main__":
     main()

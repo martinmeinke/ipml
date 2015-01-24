@@ -124,9 +124,9 @@ class RandomTree(object):
     
         for item in data_subset:
             item_class = train_labels[item][0]
-            if frequencies.has_key(item_class):
+            try:
                 frequencies[item_class] += 1
-            else:
+            except:
                 frequencies[item_class] = 1
     
         for freq in frequencies.values():
@@ -139,9 +139,9 @@ class RandomTree(object):
         counts = {}
         for item in data_subset:
             item_class = train_labels[item][0]
-            if counts.has_key(item_class):
+            try:
                 counts[item_class] += 1
-            else:
+            except:
                 counts[item_class] = 1
         sortedCounts = sorted(counts.items(), key=operator.itemgetter(1), reverse=True)
         return sortedCounts[0][0]    

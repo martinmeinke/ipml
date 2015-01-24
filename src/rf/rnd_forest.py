@@ -25,28 +25,34 @@ class ForestParams(object):
     NUM_THRES_STEPS = 10
     #NUM_THRES_STEPS = 10
     
-    #maximum tries for testing different attribute sets to find best split
+    #maximum tries for testing different attributes to find best split
     MAX_TRIES = 10
     
-    FOREST_SIZE = 10
+    FOREST_SIZE = 1
     
     MAX_TREE_DEPTH = 100
     
     def __init__(self, num_intput, num_features):
-        self.NUM_ATTRIBUTES = int(sqrt(num_features))
+        self.NUM_ATTRIBUTES = int(sqrt(num_features))*2
         self.SAMPLE_SUBSET_SIZE = int(num_intput*2/3)
+        self.log()
         
-        
+    def log(self):
+        msg = "RF parameters: "
+        logger.info(msg)
 
 class RandomForest(object):
     forest = None
     f_parms = None 
+    num_data = None
+    num_features = None
     
     def __init__(self, training_features, training_labels):
-        num_input,num_features = shape(training_features)
-        self.f_parms = ForestParams(num_input, num_features)
+        self.num_data, self.num_features = shape(training_features)
+        self.f_parms = ForestParams(self.num_data, self.num_features)
+        self.train_data = training_features
+        self.train_labels = training_labels        
         self.forest = []
-        self.train_data = self.create_mapping(training_features, training_labels)        
     
     def prepare_forest(self):
         for __ in xrange(self.f_parms.FOREST_SIZE):
@@ -77,9 +83,9 @@ class RandomForest(object):
         i=0
         self.prepare_forest()
         for tree in self.forest:
-            data_subset = self.dict_subsample(self.train_data, self.f_parms.SAMPLE_SUBSET_SIZE)
-            attributes = [j for j in xrange(len(self.train_data.items()[0][0]))]
-            tree.build_tree(data_subset, attributes)
+            data_subset = self.gen_subset( self.f_parms.SAMPLE_SUBSET_SIZE)
+            attributes = [j for j in xrange(self.num_features)]            
+            tree.build_tree(self.train_data, self.train_labels, data_subset, attributes)
             i+=1
             logger.info("Forest size: " + str(i))
                             
@@ -97,6 +103,12 @@ class RandomForest(object):
         pool.close()
         pool.join()
     
+    def gen_subset(self, sub_size):
+        subset = []
+        for _ in xrange(sub_size):
+            sample_idx = random.randrange(0, self.num_data-1)
+            subset.append(sample_idx)
+        return subset
     
     """
     Returns a random subset of each data set in ARGS of size SUB_SIZE with replacement

@@ -33,13 +33,14 @@ class RandomTree(object):
     '''
     generates a rondomized decision tree
     '''
-    def generate_tree(self, train_data, train_labels, data_subset, attribute_subset, actual_depth):
+    def generate_tree(self, train_data, train_labels, data_subset, feature_subset, actual_depth):
         default_class = self.get_majority_class(data_subset, train_labels)
         actual_depth +=1
+        features = list(feature_subset)
     
         #Base cases:
         #No more train_data or maximal depth reached, take the majority
-        if len(data_subset) < 2 or actual_depth > self.f_parms.MAX_TREE_DEPTH:
+        if len(data_subset) < 2 or (actual_depth > self.f_parms.MAX_TREE_DEPTH and self.f_parms.MAX_TREE_DEPTH is not None):
             root = DecisionTreeNode()
             root.set_label(default_class)
             return root
@@ -56,37 +57,44 @@ class RandomTree(object):
             root.set_label(first_class)
             return root
     
-        #decide best feature to split on
-        
-        attributes = self.list_index_sub_sample(attribute_subset, self.f_parms.NUM_ATTRIBUTES)
+        #shuffle all features for randomly picking one
+        random.shuffle(features)
+        attribute = features.pop()
         best_gain = -1
         best_threshold = -1
         
+        #decide best feature to split on
         for i in range(self.f_parms.MAX_TRIES):
-            for attribute in attributes:
-                for threshold in self.calc_thresholds(train_data, data_subset, attribute, self.f_parms.NUM_THRES_STEPS):
-                    gain = self.calc_inf_gain(train_data, train_labels, data_subset, attribute, threshold)
-                    if gain > best_gain:
-                        best_gain = gain
-                        best_attribute = attribute
-                        best_threshold = threshold
+            for threshold in self.calc_thresholds(train_data, data_subset, attribute, self.f_parms.NUM_THRES_STEPS):
+                gain = self.calc_inf_gain(train_data, train_labels, data_subset, attribute, threshold)
+                if gain > best_gain:
+                    best_gain = gain
+                    best_attribute = attribute
+                    best_threshold = threshold
                 
             #if no minimum gain set or gain sufficient break
-            if(self.f_parms.MIN_GAIN == None or best_gain > self.f_parms.MIN_GAIN):
+            if self.f_parms.MIN_GAIN == None or best_gain > self.f_parms.MIN_GAIN:
+                break
+            #if we tried all features to find the best split we can break
+            elif len(features) < 1:
                 break
             #if maximum iteration not reached try new set of attributes
             elif best_gain < self.f_parms.MIN_GAIN and i < (self.f_parms.MAX_TRIES -1):
-                attributes = self.list_index_sub_sample(attribute_subset, self.f_parms.NUM_ATTRIBUTES)
+                attribute = features.pop()
             else:
                 root = DecisionTreeNode()
                 root.set_label(default_class)
                 return root
     
         #Recursive build tree
-        root = DecisionTreeNode(best_attribute, best_threshold)
         yes_set, no_set = self.split_data_by_attribute(train_data, data_subset, best_attribute, best_threshold)
-        l_child = self.generate_tree(train_data, train_labels, yes_set, attribute_subset, actual_depth)
-        r_child = self.generate_tree(train_data, train_labels, no_set, attribute_subset, actual_depth)
+        if len(yes_set) < 1 or len(no_set) < 1:
+            root = DecisionTreeNode()
+            root.set_label(default_class)
+            return root
+        root = DecisionTreeNode(best_attribute, best_threshold)
+        l_child = self.generate_tree(train_data, train_labels, yes_set, feature_subset, actual_depth)
+        r_child = self.generate_tree(train_data, train_labels, no_set, feature_subset, actual_depth)
         root.set_l_child(l_child)
         root.set_r_child(r_child)
         return root
@@ -135,9 +143,10 @@ class RandomTree(object):
                 frequencies[item_class] += 1
             except:
                 frequencies[item_class] = 1
-    
+                
+        size = float(len(data_subset))
         for freq in frequencies.values():
-            p = freq/float(len(data_subset))
+            p = freq/size
             ent -= p * math.log(p, 2)
             
         return ent

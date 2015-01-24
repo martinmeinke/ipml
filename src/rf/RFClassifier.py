@@ -13,14 +13,13 @@ class RFClassifier(Classifier):
         self._fp = featureProvider
         self.TrainingFileName = "RFTraining"
         self.Training = None
-        self.RF = None
         
     def train(self):
-        self.RF = RandomForest(self._fp.TrainData.tolist(), self._fp.TrainLabels.tolist())
-        self.RF.parallel_generate_forest()
+        self.Training = RandomForest(self._fp.TrainData.tolist(), self._fp.TrainLabels.tolist())
+        self.Training.parallel_generate_forest()
         
     def testValidationSet(self):
-        predictions = self.RF.predict(self._fp.ValidationData.tolist())
+        predictions = self.Training.predict(self._fp.ValidationData.tolist())
         acc = self.getAccuracy(predictions, self._fp.ValidationLabels.tolist())
         return acc
     

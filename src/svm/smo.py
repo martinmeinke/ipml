@@ -1,8 +1,6 @@
 from numpy import *
 import logging
 
-logger = logging.getLogger(__name__)
-
 def selectJrand(i,m):
     j=i #we want to select any J not equal to i
     while (j==i):
@@ -86,19 +84,19 @@ def innerL(i, oS):
         L = max(0, oS.alphas[j] + oS.alphas[i] - oS.C)
         H = min(oS.C, oS.alphas[j] + oS.alphas[i])
     if L==H:
-        logger.info("L==H")
+        logging.info("L==H")
         return 0
 
     eta = 2.0 * oS.K[i,j] - oS.K[i,i] - oS.K[j,j] #changed for kernel
     if eta >= 0:
-        logger.info("eta>=0")
+        logging.info("eta>=0")
         return 0
 
     oS.alphas[j] -= oS.labelMat[j]*(Ei - Ej)/eta
     oS.alphas[j] = clipAlpha(oS.alphas[j],H,L)
     updateEk(oS, j) #added this for the Ecache
     if abs(oS.alphas[j] - alphaJold) < 0.00001:
-        logger.info("j not moving enough")
+        logging.info("j not moving enough")
         return 0
 
     oS.alphas[i] += oS.labelMat[j]*oS.labelMat[i]*(alphaJold - oS.alphas[j])#update i by the same amount as j
@@ -115,27 +113,25 @@ def innerL(i, oS):
 
 def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Platt SMO
     oS = optStruct(dataMatIn,classLabels,C,toler, kTup)
-    iter = 0
+    iteration = 0
     entireSet = True; alphaPairsChanged = 0
     logging.info("Starting main loop")
-    while iter < maxIter and (alphaPairsChanged > 0 or entireSet):
+    while iteration < maxIter and (alphaPairsChanged > 0 or entireSet):
         alphaPairsChanged = 0
         if entireSet:   #go over all
             for i in range(oS.m):
                 alphaPairsChanged += innerL(i,oS)
-                if i % 50 == 0:
-                    logger.info("fullSet, iter: %d i:%d, pairs changed %d" % (iter,i,alphaPairsChanged))
-            iter += 1
+                logging.info("fullSet, iteration: %d i:%d, pairs changed %d" % (iteration,i,alphaPairsChanged))
+            iteration += 1
         else: #go over non-bound (railed) alphas
             nonBoundIs = nonzero((oS.alphas.A > 0) * (oS.alphas.A < C))[0]
             for i in nonBoundIs:
                 alphaPairsChanged += innerL(i,oS)
-                if i % 50 == 0:
-                    logger.info("non-bound, iter: %d i:%d, pairs changed %d" % (iter,i,alphaPairsChanged))
-            iter += 1
+                logging.info("non-bound, iteration: %d i:%d, pairs changed %d" % (iteration,i,alphaPairsChanged))
+            iteration += 1
         if entireSet:
             entireSet = False #toggle entire set loop
         elif alphaPairsChanged == 0:
             entireSet = True
-        logger.info("iteration number: %d" % iter)
+        logging.info("iteration number: %d" % iteration)
     return oS.b,oS.alphas

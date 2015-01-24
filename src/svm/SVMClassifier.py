@@ -37,12 +37,12 @@ class SVMClassifier(Classifier):
         self.Training.SupportVectors = self._fp.TrainData[svInd]
         self.Training.SVLabels = self._fp.TrainLabels[svInd];
     
-    def testValidationSet(self):
+    def testDataSet(self, dataSet, dataLabels):
         errorCount = 0
-        m,n = shape(self._fp.ValidationData)
+        m,n = shape(dataSet)
         for i in range(m):
-            kernelEval = kernelTrans(self.Training.SupportVectors, self._fp.ValidationData[i,:], self.Training.UsedKernel)
+            kernelEval = kernelTrans(self.Training.SupportVectors, dataSet[i,:], self.Training.UsedKernel)
             predict = kernelEval.T * multiply(self.Training.SVLabels, self.Training.Alphas[self.Training.SVIndices]) + self.Training.B
-            if sign(predict) != sign(self._fp.ValidationLabels[i]):
+            if sign(predict) != sign(dataLabels[i]):
                 errorCount += 1
         return float(errorCount) / m

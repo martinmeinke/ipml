@@ -132,16 +132,16 @@ class IMPLDriver(object):
             logging.info("Saving training of classifier %s to file", classifier.Name)
             classifier.saveTraining()
             
-        errorRate = -1
         if self.Setup.TestValidationSet:
             logging.info("Testing the validation set with classifier %s", classifier.Name)
-            # TODO: which output do we return. and how?
-            errorRate = classifier.testValidationSet()
-            msg = "%s: Validation Test Error Rate = %s" % (classifier.Name, str(errorRate))
-            logging.info("RESULT of %s", msg)
-            print msg
-        return errorRate
-        # TODO: do the same as validation but with test set. so classifier.testTestSet()
+            self._runClassifierOnSet(classifier, "Validation", self.FeatureProvider.ValidationData, self.FeatureProvider.ValidationLabels)
+            self._runClassifierOnSet(classifier, "Test", self.FeatureProvider.TestData, self.FeatureProvider.TestLabels)
+
+    def _runClassifierOnSet(self, classifier, runname, data, labels):
+        errorRate = classifier.testDataSet(data, labels)
+        msg = "%s: %s Error Rate = %s" % (runname, classifier.Name, str(errorRate))
+        logging.info("RESULT of %s", msg)
+        print msg
 
 def runDriver(*configurations):
     driver = IMPLDriver()
@@ -234,9 +234,10 @@ def main():
     loadRFandValidate.SaveTraining = False
     
     svmArgs = [
-        dict(C=0.01, maxIter=5, kTup=('rbf', 1.3)),
-        dict(C=1, maxIter=5, kTup=('rbf', 1.3)),
-        dict(C=10, maxIter=5, kTup=('rbf', 1.3))
+        dict(C=5, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=10, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=15, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=20, maxIter=5, kTup=('rbf', 1.3)),
     ]
     trainSVMConfs = []    
     for args in svmArgs:

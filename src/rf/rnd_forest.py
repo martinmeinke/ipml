@@ -28,7 +28,7 @@ class ForestParams(object):
     #maximum tries for testing different attributes to find best split
     MAX_TRIES = 10
     
-    FOREST_SIZE = 1
+    FOREST_SIZE = 10
     
     MAX_TREE_DEPTH = 100
     
@@ -95,9 +95,9 @@ class RandomForest(object):
         pool = Pool(processes=cores)
         args = []
         for __ in xrange(self.f_parms.FOREST_SIZE):
-            data_subset = self.dict_subsample(self.train_data, self.f_parms.SAMPLE_SUBSET_SIZE)
-            attributes = [j for j in xrange(len(self.train_data.items()[0][0]))]
-            args.append((self.f_parms, data_subset, attributes))
+            data_subset = self.gen_subset( self.f_parms.SAMPLE_SUBSET_SIZE)
+            attributes = [j for j in xrange(self.num_features)]
+            args.append((self.f_parms, self.train_data, self.train_labels, data_subset, attributes))
                             
         self.forest = pool.map(parallel_build_tree, args)
         pool.close()
@@ -109,29 +109,6 @@ class RandomForest(object):
             sample_idx = random.randrange(0, self.num_data-1)
             subset.append(sample_idx)
         return subset
-    
-    """
-    Returns a random subset of each data set in ARGS of size SUB_SIZE with replacement
-    """    
-    def dict_subsample(self, data, sub_size):
-        data_size = len(data)
-        subset = {}
-    
-        for _ in xrange(sub_size):
-            sample = data.items()[random.randrange(0, data_size)]
-            subset[sample[0]] = sample[1][0]
-    
-        return subset
-    
-    def create_mapping(self, features, labels):
-        """
-        Returns a dictionary of keys(features) : values(labels)
-        """
-        result = {}
-        if len(features) != len (labels):
-            raise Exception("Keys and labels length do not match")
-        for i in xrange(len(features)):
-            result[tuple(features[i])] = labels[i]
-        return result
+
 
         

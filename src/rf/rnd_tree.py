@@ -5,12 +5,15 @@ import operator
 '''
 function for parallel building of trees
 args[0] has the attributes for RandomTree constructor
-args[1] is the data
-args[2] are the attributes
+args[1] is the whole train_data
+args[2] are the whole train_labels
+args[3] is the data_subset for the tree
+args[4] are the attributes
 '''
+
 def parallel_build_tree(args):
     tree = RandomTree(args[0])
-    tree.build_tree(args[1], args[2])
+    tree.build_tree(args[1], args[2], args[3], args[4])
     return tree
 
 

@@ -82,9 +82,9 @@ class FeatureExtractor(object):
         parentpipe, childpipe = mp.Pipe()
         p = mp.Process(target=extract_texels, args=(trainset, self.feature_border, self.distance_threshold, self.num_features, logging.getLogger(), childpipe))
         p.start()
-        p.join()
         logging.info("Reading features from pipe")
         self.texel_features = parentpipe.recv()
+        p.join()
         self.mytimer.tick()
         
         logging.info('INTEGRATION DONE')

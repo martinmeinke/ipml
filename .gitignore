@@ -60,3 +60,5 @@ target/
 # logs
 logs/
 trainings/
+saved/*.all.1000.gz
+data/

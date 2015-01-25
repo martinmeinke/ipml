@@ -204,12 +204,12 @@ def main():
     # generate some real and useful features
     generateAndSaveFeatures = IMPLRunConfiguration()
     generateAndSaveFeatures.CreateDataSetPartitioning = True
-    generateAndSaveFeatures.DataProviderMax = 8000 # num files to take into consideration
+    generateAndSaveFeatures.DataProviderMax = -1
     generateAndSaveFeatures.SaveDataSetPartitioning = True
     generateAndSaveFeatures.ExtractFeatures = True
     generateAndSaveFeatures.SaveExtractedFeatures = True
     generateAndSaveFeatures.FeatureExtractionArgs = {
-        'num_features' : 500,
+        'num_features' : 1000,
         'max_texel_pics' : 5000
     }
 
@@ -220,6 +220,14 @@ def main():
     runSVMWith8000_500.ExtractFeatures = False
     runSVMWith8000_500.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.500.gz")
     runSVMWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
+    
+    runSVMWithAll_1000 = IMPLRunConfiguration()
+    runSVMWithAll_1000.RunSVM = True
+    runSVMWithAll_1000.SaveTraining = True
+    runSVMWithAll_1000.CreateDataSetPartitioning = False
+    runSVMWithAll_1000.ExtractFeatures = False
+    runSVMWithAll_1000.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.all.1000.gz")
+    runSVMWithAll_1000.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.all.1000.gz")
     
     
     # this configuration doesn't extract features, but only runs the RF with training and validation test
@@ -242,19 +250,17 @@ def main():
     runRFWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
     
     svmArgs = [
-        dict(C=5, maxIter=5, kTup=('rbf', 1.3)),
-        dict(C=10, maxIter=5, kTup=('rbf', 1.3)),
-        dict(C=15, maxIter=5, kTup=('rbf', 1.3)),
-        dict(C=20, maxIter=5, kTup=('rbf', 1.3)),
+        dict(C=30, maxIter=10, kTup=('rbf', 1.3)),
     ]
     trainSVMConfs = []    
     for args in svmArgs:
-        conf = copy.copy(runSVMWith8000_500)
-        conf.DataProviderMax = 5000
+        conf = copy.copy(runSVMWithAll_1000)
+        conf.DataProviderMax = 16000
         conf.SVMArgs = args
         trainSVMConfs.append(conf)
 
-    runDriver(loadRFandValidate)
+    runDriver(*trainSVMConfs)
+
 
     
 if __name__ == "__main__":

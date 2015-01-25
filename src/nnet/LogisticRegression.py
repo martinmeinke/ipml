@@ -23,7 +23,7 @@ class SoftMax(Layer):
     determine a class membership probability.
     """
 
-    def __init__(self, rng, n_out):
+    def __init__(self, rng, n_out, l1, l2):
         """ Initialize the parameters of the logistic classifiers
 
         :type input: theano.tensor.TensorType
@@ -37,8 +37,8 @@ class SoftMax(Layer):
         """
         self.rng = rng
         self.n_out = n_out
-        self.lambda_l1 = 0.000000
-        self.lambda_l2 = 0.00003
+        self.lambda_l1 = l1
+        self.lambda_l2 = l2
 
     def build(self):
         n_in = self.previous.num_outputs

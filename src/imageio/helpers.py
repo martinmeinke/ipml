@@ -13,6 +13,7 @@ from math import ceil, sqrt, log
 import sys
 from select import select
 import itertools
+import re
 
 
 def plot_qimage_grayscale(image, title=''):
@@ -73,6 +74,7 @@ def plot_misclassified_images(misclassified_images, test_set, max_images=36, edg
     plt.show()
     plt.figure(1)
 
+
 def plot_kernels(layers, layerids, figids):
     for layer, figid in zip(layerids, figids):
         plt.figure(figid)
@@ -84,7 +86,8 @@ def plot_kernels(layers, layerids, figids):
             plt.subplot(ceil(sqrt(kernels)), ceil(sqrt(kernels)), i)
             kernel = numpy.copy(layers[layer].W.container.data[i - 1][0])
             # normalized = kernel + abs(numpy.min(kernel))
-            plt.imshow(kernel, cmap='BrBG', interpolation='none', vmin=-0.5, vmax=0.5)
+            plt.imshow(
+                kernel, cmap='BrBG', interpolation='none', vmin=-0.5, vmax=0.5)
 
         plt.draw()
     # switch back to the main figure (TODO: there might be an API call to get
@@ -105,7 +108,7 @@ def check_break():
 
 
 def set_details(s):
-    return "#samples: {}, #dogs: {}, #bytes: {}".format(len(s[1]), numpy.sum(s[1]), s[0].nbytes+s[1].nbytes)
+    return "#samples: {}, #dogs: {}, #bytes: {}".format(len(s[1]), numpy.sum(s[1]), s[0].nbytes + s[1].nbytes)
 
 
 def randomly_partition(seq, proportions):
@@ -123,7 +126,7 @@ def randomly_partition(seq, proportions):
         for i in range(int(partition)):  # @UnusedVariable
             elementidx = random.randrange(0, len(seq))
             output[-1].append(seq[elementidx])
-            del seq[elementidx]
+            seq = numpy.delete(seq, elementidx)
 
     return output
 
@@ -160,12 +163,16 @@ def resize_image(image, edgelength, stride=-1):
             bottom = ibottom - (diff - halfdiff)
             left = ileft
             right = iright
+        else:  # quadratic
+            top = itop
+            left = ileft
+            right = iright
+            bottom = ibottom
 
         box = (left, top, right, bottom)
         boxes.append(box)
     else:
         positions = range(0, diff, stride)
-        print positions
         if width > height:  # landscape
             for p in positions:
                 left = p
@@ -183,7 +190,6 @@ def resize_image(image, edgelength, stride=-1):
                 boxes.append((left, top, right, bottom))
 
     for box in boxes:
-        print box
         imagec = image.copy()
         imagen = imagec.crop(box)
         imagen.thumbnail(size, Image.ANTIALIAS)
@@ -203,20 +209,35 @@ def open_image(path):
 
 def resize_images_quadratic(inpath, tgtpath, edgelen=128, stride=-1):
     '''
-    if stance is > 0, not only the center part is cut out
+    if stance is > 0 and the image is non-quadratic,
+    the quadratic window of edge length "edgelen" is slided across the
+    longer edge of the image (using "stride" pixels of offset
+    between each image).
     '''
     filenames = os.listdir(inpath)
 
     if not os.access(tgtpath, os.R_OK):
         os.mkdir(tgtpath)
 
+    icount = 0
     for i in filenames:
+        icount += 1
+        if icount % 100 == 0:
+            print("Processing image: {}".format(icount))
+
         im = Image.open(inpath + '/' + i)
         imResize = resize_image(im, edgelen, stride)
-        for num in range(len(imResize)):
-            sim = imResize[num]
-            sim.save(tgtpath + '/' + i.replace(".jpg", "_p{}.jpg".format(num)), 'JPEG', quality=100)
-        print "Saving " + i
+        if stride > 0:
+            for num in range(len(imResize)):
+                sim = imResize[num]
+                new_filename = i.replace(".jpg", "_p{}.jpg".format(num))
+                sim.save(
+                    tgtpath + '/' + new_filename, 'JPEG', quality=100)
+        else:
+            imResize[0].save(
+                tgtpath + '/' + i, 'JPEG', quality=100)
+
+        # print "Saving " + i
 
 
 def isdog(filename):
@@ -230,12 +251,16 @@ def rgb2gray(rgb):
     return numpy.dot(rgb[..., :3], [0.299, 0.587, 0.144])
 
 
-def convert_image_representation(image):
+def convert_image_representation(image, eval_dog=True):
     x = open_image(image)
-    return (numpy.array(x[0]), isdog(x[1]))
+    if eval_dog:
+        return (numpy.array(x[0]), isdog(x[1]))
+    else:
+        return (numpy.array(x[0]), x[1])
 
+    return x
 
-def create_samples(image_path, partitiondef=(6, 2, 2), partial=100):
+def create_samples(image_path, partitiondef=(6, 2, 2), partial=100, train_enhanced=False):
     """ creates an arbitrary amount of sample sets
     the number of sets is defined by the number of elements in the
     partitiondef tuple.
@@ -247,31 +272,61 @@ def create_samples(image_path, partitiondef=(6, 2, 2), partial=100):
     (0.5,2,2.5) = 10%, 40%, 50%
     """
     # this fails on large images! (not enough ram)
-    filenames = os.listdir(image_path)
+    filenames_total = os.listdir(image_path)
 
+    # we need to filter out images that are simply enhanced versions
+    # of the base images, as this would skew training, images are
+    # considered "enhanced" if they don't follow the default naming
+    # scheme
+    r = re.compile('(dog|cat)\.[0-9]+\.jpg')
+    filenames = filter(r.match, filenames_total)
+    filenames_enhanced = set(filenames_total) - set(filenames)
+
+    # if the dataset is to be used partially cut off the end of
+    # a random permutation of the filenames
     if partial != 1:
         upto = partial / 100.0 * len(filenames)
         filenames = numpy.random.permutation(filenames)[0:upto]
 
-    images = map(lambda x: convert_image_representation(
-        image_path + '/' + x), filenames)
-    # images = map(lambda x: open_image(image_path+'/'+x), filenames)     #[(img, path), (img, path)]
-    # images = map(lambda x: (x[0], isdog(x[1])),images)                  #[(img, 1), (img, 0)]
-    # images = map(lambda x: (numpy.array(x[0]), x[1]), images)
-    # [(arr, 1), (arr, 0)]
-    samples = randomly_partition(images, partitiondef)
+    samples = randomly_partition(filenames, partitiondef)
 
-    # make tuple for each set
     sets = []
-    for tset in samples:  # for each set
-        sets.append((numpy.asarray(map(lambda x: x[0], tset)), numpy.asarray(
-            map(lambda x: x[1], tset))))
+    for sampleset_n in range(len(samples)):
+        sampleset = samples[sampleset_n]
+
+        if train_enhanced and sampleset_n == 0:  # this is the training set
+            # filter the enhanced files, corresponding to the samples in this
+            # set
+            sampleset_prefix = map(lambda x: x.replace(".jpg", "_"), sampleset)
+            sampleset_tuple = tuple(sampleset_prefix)
+
+            # takes a while, but performance isn't too bad
+            sampleset += filter(
+                lambda x: x.startswith(sampleset_tuple), filenames_enhanced)
+
+        images = map(lambda x: convert_image_representation(
+            image_path + '/' + x), sampleset)
+
+        sets.append((numpy.asarray(map(lambda x: x[0], images)), numpy.asarray(
+            map(lambda x: x[1], images))))
+
+#     images = map(lambda x: convert_image_representation(
+#         image_path + '/' + x), filenames)
+#
+#     samples = randomly_partition(images, partitiondef)
+#
+# make tuple for each set
+#     sets = []
+# for tset in samples:  # for each set
+#         sets.append((numpy.asarray(map(lambda x: x[0], tset)), numpy.asarray(
+#             map(lambda x: x[1], tset))))
 
     return sets
 
 
 def lr_decay(lrl, lrt0, decrease_factor, t):
-    return lrl / (lrt0 + (log(t*decrease_factor + 2)))-0.012
+    """models the learning rate decay over time t"""
+    return lrl / (lrt0 + (log(t * decrease_factor + 2))) - 0.012
 
 
 def plot_lr_decay():
@@ -296,14 +351,27 @@ def flip_images(inpath):
     for i in filenames:
         im = Image.open(inpath + '/' + i)
         mirror_img = ImageOps.mirror(im)
-        mirror_img.save(inpath + '/' + i.replace(".jpg","_mirr.jpg"), 'JPEG', quality=100)
+        mirror_img.save(
+            inpath + '/' + i.replace(".jpg", "_mirr.jpg"), 'JPEG', quality=100)
 
 
 def main():
     # resize_images()
     # train, cv, test = create_samples(tstpath)
-    resize_images_quadratic("../../data/test_patches", "../../data/train_images_96_test_enhanced", edgelen=96, stride=5)
-    flip_images("../../data/train_images_96_test_enhanced")
+
+    source_dataset = "../../data/train_orig"
+    target_dataset = "../../data/train_48_s40"
+
+    # CENTER CUT
+    resize_images_quadratic(
+        source_dataset, target_dataset, edgelen=48, stride=-1)
+
+    # STRIDE CUT
+    resize_images_quadratic(
+        source_dataset, target_dataset, edgelen=48, stride=40)
+
+    # MIRRORED
+    flip_images(target_dataset)
 
     # plot_lr_decay()
     pass

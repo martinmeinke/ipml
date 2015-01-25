@@ -41,7 +41,7 @@ import matplotlib.pyplot as plt
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(asctime)s %(message)s')
 logger = logging.getLogger(__name__)
 
-def prepare_data(dataset):
+def prepare_training_data(dataset):
  
     print('creating datasets...')
     sets = create_samples("../../data/train_images_10percent", (65,17,18))
@@ -209,7 +209,7 @@ def evaluate_net(learning_rate=0.03, n_epochs=200,
 
     rng = numpy.random.RandomState(23455)
 
-    datasets = prepare_data(dataset)
+    datasets = prepare_training_data(dataset)
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1]

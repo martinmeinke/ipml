@@ -9,7 +9,7 @@ import theano.tensor as T
 from theano.tensor.signal import downsample
 import numpy
 import logging
-from nnet.ConvolutionalLayer import ConvolutionalLayer
+from nnet.ConvLayer import ConvLayer
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class SubsamplingLayer(Layer):
         self.activation = activation
 
     def compute_output_shape(self):
-        if isinstance(self.previous, ConvolutionalLayer):
+        if isinstance(self.previous, ConvLayer):
             batch_size = self.previous.outputshape[0]
             nkernels = self.previous.fshp[0]
             height = self.previous.outputshape[2] / self.poolsize[0]

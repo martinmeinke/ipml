@@ -9,7 +9,7 @@ from theano.tensor.nnet import conv
 from nnet.Layer import Layer
 
 
-class ConvolutionalLayer(Layer):
+class ConvLayer(Layer):
 
     '''
     classdocs

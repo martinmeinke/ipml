@@ -1,12 +1,15 @@
 from numpy import *
 import logging
+from numba import jit
 
+@jit
 def selectJrand(i,m):
     j=i #we want to select any J not equal to i
     while (j==i):
         j = int(random.uniform(0,m))
     return j
 
+@jit
 def clipAlpha(aj,H,L):
     if aj > H:
         aj = H
@@ -14,6 +17,7 @@ def clipAlpha(aj,H,L):
         aj = L
     return aj
 
+@jit
 def kernelTrans(X, A, kTup): #calc the kernel or transform data to a higher dimensional space
     m,n = shape(X)
     K = mat(zeros((m,1)))
@@ -38,14 +42,20 @@ class optStruct:
         self.eCache = mat(zeros((self.m,2))) #first column is valid flag
         self.K = mat(zeros((self.m,self.m)))
         logging.info("Applying kernel transformation to data")
+        self.applyKernelTrans(kTup)
+
+    @jit
+    def applyKernelTrans(self, kTup):
         for i in range(self.m):
             self.K[:,i] = kernelTrans(self.X, self.X[i,:], kTup)
 
+@jit
 def calcEk(oS, k):
     fXk = float(multiply(oS.alphas,oS.labelMat).T*oS.K[:,k] + oS.b)
     Ek = fXk - float(oS.labelMat[k])
     return Ek
 
+@jit
 def selectJ(i, oS, Ei):         #this is the second choice -heurstic, and calcs Ej
     maxK = -1; maxDeltaE = 0; Ej = 0
     oS.eCache[i] = [1,Ei]  #set valid #choose the alpha that gives the maximum delta E
@@ -63,10 +73,12 @@ def selectJ(i, oS, Ei):         #this is the second choice -heurstic, and calcs 
         Ej = calcEk(oS, j)
     return j, Ej
 
+@jit
 def updateEk(oS, k):#after any alpha has changed update the new value in the cache
     Ek = calcEk(oS, k)
     oS.eCache[k] = [1,Ek]
 
+@jit
 def innerL(i, oS):
     Ei = calcEk(oS, i)
     if (oS.labelMat[i]*Ei >= -oS.tol or oS.alphas[i] >= oS.C) and \
@@ -111,6 +123,7 @@ def innerL(i, oS):
         oS.b = (b1 + b2)/2.0
     return 1
 
+@jit
 def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Platt SMO
     oS = optStruct(dataMatIn,classLabels,C,toler, kTup)
     iteration = 0

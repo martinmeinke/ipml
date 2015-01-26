@@ -37,7 +37,7 @@ class RandomTree(object):
         default_class = self.get_majority_class(data_subset, train_labels)
         actual_depth +=1
         features = list(feature_subset)
-    
+        
         #Base cases:
         #No more train_data or maximal depth reached, take the majority
         if len(data_subset) < 2 or (actual_depth > self.f_parms.MAX_TREE_DEPTH and self.f_parms.MAX_TREE_DEPTH is not None):
@@ -72,15 +72,15 @@ class RandomTree(object):
                     best_attribute = attribute
                     best_threshold = threshold
                 
-            #if no minimum gain set or gain sufficient break
-            if self.f_parms.MIN_GAIN == None or best_gain > self.f_parms.MIN_GAIN:
-                break
             #if we tried all features to find the best split we can break
-            elif len(features) < 1:
+            if len(features) < 1:
                 break
-            #if maximum iteration not reached try new set of attributes
-            elif best_gain < self.f_parms.MIN_GAIN and i < (self.f_parms.MAX_TRIES -1):
+            #if maximum iteration not reached or no mingain set, try new set of attributes
+            elif (self.f_parms.MIN_GAIN < 0 or best_gain < self.f_parms.MIN_GAIN) and i < (self.f_parms.MAX_TRIES -1):
                 attribute = features.pop()
+            #if no minimum gain set or gain sufficient break
+            elif (best_gain > self.f_parms.MIN_GAIN and self.f_parms.MIN_GAIN > 0) or self.f_parms.MIN_GAIN < 0:
+                break
             else:
                 root = DecisionTreeNode()
                 root.set_label(default_class)
@@ -88,6 +88,8 @@ class RandomTree(object):
     
         #Recursive build tree
         yes_set, no_set = self.split_data_by_attribute(train_data, data_subset, best_attribute, best_threshold)
+        #print "depth=%d  :  split len_left=%d  len_right=%d" %(actual_depth, len(yes_set), len(no_set))
+        
         if len(yes_set) < 1 or len(no_set) < 1:
             root = DecisionTreeNode()
             root.set_label(default_class)

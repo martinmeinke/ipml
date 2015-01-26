@@ -7,6 +7,7 @@ from DataProvider import DataProvider
 
 from FeatureExtraction.FeatureClass import FeatureExtractor
 from svm.SVMClassifier import SVMClassifier
+from svm.SKLSVMClassifier import SKLSVMClassifier
 from rf.RFClassifier import RFClassifier
 
 class IMPLRunConfiguration(object):
@@ -38,6 +39,9 @@ class IMPLRunConfiguration(object):
 
         self.RunRF = False # run the random forest?
         self.RFArgs = {} # arguments for the random forest
+        
+        self.RunSklSVM = False # run the scikit learn SVM?
+        self.SklSVMArgs = {}
 
         self.LoadTraining = False # should we train the classifier or load the training?
         self.SaveTraining = False # save the training data?
@@ -63,6 +67,11 @@ class IMPLDriver(object):
             # cnn = CNN(self.DataProvider)
             # self._runClassifier(cnn, self.Setup.CNNArgs)
 
+        if self.Setup.RunSklSVM:
+            logging.info("Running SciKit Learn Support Vector Machine classifier")
+            svm = SKLSVMClassifier(self.FeatureProvider)
+            self._runClassifier(svm, self.Setup.SklSVMArgs)
+
         if self.Setup.RunSVM:
             logging.info("Running Support Vector Machine classifier")
             svm = SVMClassifier(self.FeatureProvider)
@@ -76,7 +85,7 @@ class IMPLDriver(object):
 
     def _initFeatureProvider(self):
         # check if init is necessary
-        if not self.Setup.RunSVM and not self.Setup.RunRF and not self.Setup.ExtractFeatures:
+        if not self.Setup.RunSVM and not self.Setup.RunRF and not self.Setup.ExtractFeatures and not self.Setup.RunSklSVM:
             logging.info("Not initializing a feature provider - SVM and RF won't run")
             return
         if self.FeatureProvider:
@@ -99,7 +108,7 @@ class IMPLDriver(object):
 
 
     def _initDataProvider(self):
-        if not self.Setup.RunSVM and not self.Setup.RunRF and not self.Setup.ExtractFeatures and not self.Setup.CreateDataSetPartitioning:
+        if not self.Setup.RunSVM and not self.Setup.RunRF and not self.Setup.ExtractFeatures and not self.Setup.CreateDataSetPartitioning and not self.Setup.RunSklSVM:
             logging.info("Not initializing a feature provider - SVM, RF, and FeatureExtraction won't run")
             return
         if self.DataProvider:
@@ -249,17 +258,24 @@ def main():
     runRFWith8000_500.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.500.gz")
     runRFWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
     
+    sklVsOwnSVM = copy.copy(runSVMWithAll_1000)
+    sklVsOwnSVM.SVMArgs = dict(C=30, maxIter=10, kTup=('rbf', 1.5))
+    sklVsOwnSVM.DataProviderMax = 1000
+    sklVsOwnSVM.RunSVM = True
+    #sklVsOwnSVM.RunSklSVM = True
+    
+                               
     svmArgs = [
-        dict(C=30, maxIter=10, kTup=('rbf', 1.3)),
+        dict(C=30, maxIter=10, kTup=('rbf', 1.5)),
     ]
     trainSVMConfs = []    
     for args in svmArgs:
-        conf = copy.copy(runSVMWithAll_1000)
-        conf.DataProviderMax = 16000
+        conf = copy.copy(runSVMWith8000_500)
+        #conf.DataProviderMax = 8000
+        conf.RunSklSVM = True
         conf.SVMArgs = args
         trainSVMConfs.append(conf)
-
-    runDriver(*trainSVMConfs)
+    runDriver(sklVsOwnSVM)
 
 
     

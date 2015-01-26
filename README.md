@@ -25,13 +25,6 @@ Make sure these path are accessible, they are not checked in advanced.
 Alternatively, you can just rename `data_segmentation` and `extracted_features` after creation and commit them to make them available
 Suggested filenames: `<filename>.<numfiles>.<numfeatures>`
 
-
-NUMPA
------
-How to install numpa on Ubuntu:
-http://blogs.bu.edu/mhirsch/2014/07/installing-llvm-py-and-numba-on-ubuntu-14-04/
-
-
 Tests
 -----
 run run_tests.py

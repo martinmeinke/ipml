@@ -49,6 +49,7 @@ def calcEk(oS, k):
 def selectJ(i, oS, Ei):         #this is the second choice -heurstic, and calcs Ej
     maxK = -1; maxDeltaE = 0; Ej = 0
     oS.eCache[i] = [1,Ei]  #set valid #choose the alpha that gives the maximum delta E
+    logging.debug("%s nonzero values in eCache", str(len(nonzero(oS.eCache[:,0].A)[0])))
     validEcacheList = nonzero(oS.eCache[:,0].A)[0]
     if (len(validEcacheList)) > 1:
         for k in validEcacheList:   #loop through valid Ecache values and find the one that maximizes delta E

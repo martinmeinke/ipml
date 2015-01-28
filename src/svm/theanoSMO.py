@@ -2,6 +2,8 @@ from numpy import *
 import numpy as np
 import theano
 import theano.tensor as T
+from theano.tensor.shared_randomstreams import RandomStreams
+from theano.ifelse import ifelse
 import logging
 import smo as oldSMO
 
@@ -10,13 +12,13 @@ def colToRow(x):
     # dimshuffle converts the column vector into a row vector
     return x.dimshuffle('x', 0)
 
-def selectJrand(i,m):
-    j=i #we want to select any J not equal to i
-    while (j==i):
-        j = int(random.uniform(0,m))
-    return j
+def selectRandomJ_(i, m):
+    rstr = RandomStreams()
+    # TODO: make somehow sure that the random integer is not i
+    return rstr.random_integers(None, 0, m, ndim=0)
 
 def clipAlpha(aj,H,L):
+    # in theano: aj = ifelse(T.gt(aj, H), H, aj); aj = ifelse(T.gt(L, aj), L, aj);
     if aj > H:
         aj = H
     if L > aj:
@@ -30,7 +32,6 @@ def fkKernelTrans(X_, kernel):
         raise Exception("Kernel type not supported")
 
     X = T.matrix("X")
-    tA = T.row()
     gamma = T.dscalar("gamma")
     
     calcCol = lambda A: theano.scan(fn=lambda row, A : ((row - A) ** 2).sum(), sequences=X, non_sequences=A)[0]
@@ -39,6 +40,7 @@ def fkKernelTrans(X_, kernel):
     transKernelized = theano.scan(lambda row : colKernel(row), sequences=X)[0].T
 
     # TEST: make sure the shape is (2,), because we computed one value per row based on the row vector A
+    # tA = T.row()
     # testEvalArgs = {tA:np.asarray([1,2,3]).reshape(1,3), X:np.arange(0,6).reshape(2,3), gamma:gamma_}
     # testEvaled = colKernel(tA).eval(testEvalArgs)
     # logging.info("Test evaled type: %s,  shape: %s, value: %s", str(type(testEvaled)), str(testEvaled.shape), str(testEvaled))
@@ -76,6 +78,17 @@ def kernelTrans(X_, A_, kernel):
     compKernel = theano.function(inputs=[X, A, gamma], outputs=kernelExp, on_unused_input='ignore')
     return mat(compKernel(X_, A_, gamma_)).T
 
+class symbolStruct:
+    def __init__(self):
+        self.labels = T.col("labels")
+        self.C = T.scalar("C")
+        self.tol = T.scalar("tol")
+        self.K = T.matrix("K")
+        self.m = self.K.shape[0]
+        self.alphas = T.col()
+        self.b = T.scalar()
+        self.eCache = T.matrix()
+
 class optStruct:
     def __init__(self,dataMatIn, classLabels, C, toler, kTup):  # Initialize the structure with the parameters
         self.X = dataMatIn
@@ -97,40 +110,57 @@ class optStruct:
         #     oldK[:,i] = oldSMO.kernelTrans(self.X, self.X[i,:], kTup)
         # logging.info("K shape: %s", str(self.K.shape))
         # logging.info("Old an new K are equal: %s", str(np.allclose(oldK, self.K, atol=10**-5)))
-        
+
+def calcEk_(sS, k):
+    # take [0] index as the result is a vector with 0 element
+    return (T.dot(colToRow(sS.alphas * sS.labels), sS.K[:,k]) + sS.b - sS.labels[k])[0]
 
 def calcEk(oS, k_):
-    K = T.matrix("K")
-    labels = T.col("labels")
-    alphas = T.col("alphas")
+    sS = symbolStruct()
     k = T.iscalar("k")
-    b = T.scalar("b")
+    
+    Ek = calcEk_(sS, k)
+    compEk = theano.function(inputs=[sS.labels, sS.alphas, sS.K, sS.b, k], outputs=Ek)
+    res = compEk(oS.labelMat, oS.alphas, oS.K, oS.b, k_)
+    logging.debug("E[%s] is %s", str(k_), str(res))
+    return res
 
-    Ek = T.dot(colToRow(alphas * labels), K[:,k]) + b - labels[k]
+def selectJ_(sS, i, Ei):
+    # make sure error of i is cached
+    sS.eCache = T.set_subtensor(sS.eCache[i,:], [1, Ei], inplace=True)
 
-    compEk = theano.function(inputs=[labels, alphas, K, k, b], outputs=Ek)
-    return compEk(oS.labelMat, oS.alphas, oS.K, k_, oS.b)
+    # code to check error cache list for error with biggest delta to Ei
+    validEcacheList = sS.eCache[:,0].nonzero()[0]
+    deltaErrors = theano.scan(lambda k: abs(Ei - calcEk_(sS.alphas, sS.labels, sS.K, sS.b, k)), sequences=[validEcacheList])[0]
+    selectMaxError = T.max_and_argmax(deltaErrors)
+    
+    # if we donÄt have cached errors, yet, we need code to select a random j and Ej
+    randomJ = selectRandomJ_(i, sS.m)
+    randomJAndError = [calcEk_(sS.alphas, sS.labels, sS.K, sS.b, randomJ), randomJ]
 
-def selectJ(i, oS, Ei):         #this is the second choice -heurstic, and calcs Ej
-    maxK = -1; maxDeltaE = 0; Ej = 0
-    oS.eCache[i] = [1,Ei]  #set valid #choose the alpha that gives the maximum delta E
-    validEcacheList = nonzero(oS.eCache[:,0].A)[0]
-    if (len(validEcacheList)) > 1:
-        for k in validEcacheList:   #loop through valid Ecache values and find the one that maximizes delta E
-            if k == i: continue #don't calc for i, waste of time
-            Ek = calcEk(oS, k)
-            deltaE = abs(Ei - Ek)
-            if (deltaE > maxDeltaE):
-                maxK = k; maxDeltaE = deltaE; Ej = Ek
-        return maxK, Ej
-    else:   #in this case (first time around) we don't have any valid eCache values
-        j = selectJrand(i, oS.m)
-        Ej = calcEk(oS, j)
-    return j, Ej
+    # either return a j selected by cached errors or random
+    return ifelse(T.gt(validEcacheList.shape[0], 1), selectMaxError, randomJAndError)
 
+def selectJ(i_, oS, Ei_):
+    sS = symbolStruct()
+    Ei = T.scalar()
+    i = T.iscalar("i")
+    
+    selectedJ = selectJ(sS, i, Ei)
+    compSelectedJ = theano.function(inputs=[sS.eCache, sS.labels, sS.alphas, sS.K, sS.b, sS.m, i, Ei], outputs=selectedJ, on_unused_input='ignore')
+    
+    # debugFun = theano.function(inputs=[eCache, Ei, labels, alphas, K, b, i, m], outputs=calcEk_(alphas, labels, K, b, randomJ), on_unused_input='ignore')
+    # logging.debug("Value of calcEk_: %s", str(debugFun(oS.eCache, Ei_, oS.labelMat, oS.alphas, oS.K, oS.b, i_, oS.m)))
+
+    oS.eCache[i_,:] = [1, Ei_]    
+    return compSelectedJ(oS.eCache, oS.labelMat, oS.alphas, oS.K, oS.b, oS.m, i_, Ei_)
+
+    
 def updateEk(oS, k):#after any alpha has changed update the new value in the cache
+    # use T.set_subtensor(oS.eCache[k,:], [1,Ek], inplace=True)
     Ek = calcEk(oS, k)
-    oS.eCache[k] = [1,Ek]
+    logging.debug("Updating eCache[%s,:] to %s", str(k), str(Ek))
+    oS.eCache[k,:] = [1,Ek]
 
 def innerL(i, oS):
     Ei = calcEk(oS, i)
@@ -138,7 +168,14 @@ def innerL(i, oS):
        (oS.labelMat[i]*Ei <=  oS.tol or oS.alphas[i] < 0):
         return 0
 
-    j,Ej = selectJ(i, oS, Ei) #this has been changed from selectJrand
+    Ej, j = selectJ(i, oS, Ei) # both return values are ndarrray, we need to unpack them
+    Ej = Ej.item(0)
+    j = j.item(0)
+    # oldJ, oldEj = oldSMO.selectJ(i, oS, Ei)
+    # logging.debug("New Ej: %s, new j: %s; Old Ej: %s, old j: %s", str(Ej), str(j), str(oldEj), str(oldJ))
+    # logging.debug("New Ej type: %s, new j type: %s; Old Ej type: %s, old j type: %s", str(type(Ej)), str(type(j)), str(type(oldEj)), str(type(oldJ)))
+    
+    
     alphaIold = oS.alphas[i].copy()
     alphaJold = oS.alphas[j].copy()
 
@@ -157,7 +194,9 @@ def innerL(i, oS):
         logging.info("eta>=0")
         return 0
 
-    oS.alphas[j] -= oS.labelMat[j]*(Ei - Ej)/eta
+    update =  oS.alphas[j] - oS.labelMat[j]*(Ei - Ej)/eta
+    logging.debug("j is %s, Ej is %s, alphas[j] shape: %s, update shape: %s", str(j), str(Ej), str(np.shape(oS.alphas[j])), str(np.shape(update)))
+    oS.alphas[j] = update
     oS.alphas[j] = clipAlpha(oS.alphas[j],H,L)
     updateEk(oS, j) #added this for the Ecache
     if abs(oS.alphas[j] - alphaJold) < 0.00001:

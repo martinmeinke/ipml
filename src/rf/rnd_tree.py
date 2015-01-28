@@ -2,6 +2,7 @@ import math
 import random
 import operator
 
+
 '''
 function for parallel building of trees
 args[0] has the attributes for RandomTree constructor
@@ -37,7 +38,6 @@ class RandomTree(object):
         default_class = self.get_majority_class(data_subset, train_labels)
         actual_depth +=1
         features = list(feature_subset)
-        
         #Base cases:
         #No more train_data or maximal depth reached, take the majority
         if len(data_subset) < 2 or (actual_depth > self.f_parms.MAX_TREE_DEPTH and self.f_parms.MAX_TREE_DEPTH is not None):
@@ -112,7 +112,7 @@ class RandomTree(object):
         return vals
         #step_size = (maximum - minimum) / float(num_steps)
         #return [minimum+step_size * i for i in xrange(1, num_steps)]
-    
+
     def calc_feature_range(self, train_data, data_subset, attribute):
         max_val = train_data[data_subset[0]][attribute]
         min_val = train_data[data_subset[0]][attribute]
@@ -123,13 +123,40 @@ class RandomTree(object):
                 min_val = train_data[item][attribute]
         return (min_val, max_val)
     
+    def calc_gini_gain(self, train_data, train_labels, data_subset, attribute, threshold):
+        intial_gini = self.calc_gini_index(data_subset, train_labels)
+        size = float(len(data_subset))
+        yes_set, no_set = self.split_data_by_attribute(train_data, data_subset, attribute, threshold)
+        yes_gini = self.calc_gini_index(yes_set, train_labels)
+        no_gini = self.calc_gini_index(no_set, train_labels)
+        
+        return (intial_gini - ((len(yes_set) / size) * yes_gini) - ((len(no_set) / size) * no_gini))
+                
+    def calc_gini_index(self, data_subset, train_labels):
+        frequencies = {}
+        gini = 1
+    
+        for item in data_subset:
+            item_class = train_labels[item][0]
+            try:
+                frequencies[item_class] += 1
+            except:
+                frequencies[item_class] = 1
+                
+        size = float(len(data_subset))
+        
+        for freq in frequencies.values():
+            p = freq/size
+            gini -= p * p
+        return gini
+    
     def calc_inf_gain(self, train_data, train_labels, data_subset, attribute, threshold):
         size = float(len(data_subset))
         yes_set, no_set = self.split_data_by_attribute(train_data, data_subset, attribute, threshold)
         return self.calc_entropy(data_subset, train_labels) \
                - ((len(yes_set) / size) * self.calc_entropy(yes_set, train_labels)) \
                - ((len(no_set) / size) * self.calc_entropy(no_set, train_labels))
-               
+                        
     def split_data_by_attribute(self, train_data, data_subset, attribute, threshold):
         yes_set, no_set = [], []
         for item in data_subset:

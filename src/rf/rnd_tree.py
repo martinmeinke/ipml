@@ -106,8 +106,12 @@ class RandomTree(object):
     
     def calc_thresholds(self, train_data, data_subset, attribute, num_steps):
         minimum, maximum = self.calc_feature_range(train_data, data_subset, attribute)
-        step_size = (maximum - minimum) / float(num_steps)
-        return [minimum+step_size * i for i in xrange(1, num_steps)]
+        vals = []
+        for __ in xrange(num_steps):
+            vals.append(random.uniform(minimum,maximum))
+        return vals
+        #step_size = (maximum - minimum) / float(num_steps)
+        #return [minimum+step_size * i for i in xrange(1, num_steps)]
     
     def calc_feature_range(self, train_data, data_subset, attribute):
         max_val = train_data[data_subset[0]][attribute]

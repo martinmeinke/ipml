@@ -5,6 +5,11 @@ import theano.tensor as T
 import logging
 import smo as oldSMO
 
+
+def colToRow(x):
+    # dimshuffle converts the column vector into a row vector
+    return x.dimshuffle('x', 0)
+
 def selectJrand(i,m):
     j=i #we want to select any J not equal to i
     while (j==i):
@@ -94,10 +99,17 @@ class optStruct:
         # logging.info("Old an new K are equal: %s", str(np.allclose(oldK, self.K, atol=10**-5)))
         
 
-def calcEk(oS, k):
-    fXk = float(multiply(oS.alphas,oS.labelMat).T*oS.K[:,k] + oS.b)
-    Ek = fXk - float(oS.labelMat[k])
-    return Ek
+def calcEk(oS, k_):
+    K = T.matrix("K")
+    labels = T.col("labels")
+    alphas = T.col("alphas")
+    k = T.iscalar("k")
+    b = T.scalar("b")
+
+    Ek = T.dot(colToRow(alphas * labels), K[:,k]) + b - labels[k]
+
+    compEk = theano.function(inputs=[labels, alphas, K, k, b], outputs=Ek)
+    return compEk(oS.labelMat, oS.alphas, oS.K, k_, oS.b)
 
 def selectJ(i, oS, Ei):         #this is the second choice -heurstic, and calcs Ej
     maxK = -1; maxDeltaE = 0; Ej = 0
@@ -162,6 +174,8 @@ def innerL(i, oS):
         oS.b = b2
     else:
         oS.b = (b1 + b2)/2.0
+    # TODO: find a solution for that workaround so b is never a 1x1 matrix
+    oS.b = oS.b.item(0)
     return 1
 
 def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Platt SMO

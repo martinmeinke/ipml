@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import datetime
 from os import path
 
@@ -16,7 +17,7 @@ class LoggingSetup():
         Set up global logging. Can then simply be used by 'import logging; logging.info("test info")'
         """
         self.logpath = self._prepareLogFile();
-        logging.basicConfig(filename=self.logpath, format='[%(levelname)s|%(asctime)s] %(message)s', level=logging.DEBUG)
+        logging.basicConfig(filename=self.logpath, format='[%(levelname)s|%(asctime)s] %(message)s', level=logging.DEBUG, filemode='w')
 
 
     def _prepareLogFile(self):
@@ -40,4 +41,5 @@ class LoggingSetup():
             return # nothing to do if not already existing
         self._cascadeFileIfExists(basepath, level + 1)
         cascaded = createPath(level + 1)
-        os.rename(filename, cascaded)
+        # copy, don't move. we clear the file when opening. as a result we can watch logs without closing the reading application
+        shutil.copy(filename, cascaded)

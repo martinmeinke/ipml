@@ -259,10 +259,11 @@ def main():
     runRFWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
     
     sklVsOwnSVM = copy.copy(runSVMWithAll_1000)
-    sklVsOwnSVM.SVMArgs = dict(C=30, maxIter=10, kTup=('rbf', 1.5))
-    sklVsOwnSVM.DataProviderMax = 1000
+    sklVsOwnSVM.DataProviderMax = 3000
+    sklVsOwnSVM.SVMArgs = dict(C=10, maxIter=10, kTup=('rbf', 1.5))
     sklVsOwnSVM.RunSVM = True
-    #sklVsOwnSVM.RunSklSVM = True
+    sklVsOwnSVM.RunSklSVM = False
+    sklVsOwnSVM.SklSVMArgs = dict(C=10, gamma=0.0001)
     
                                
     svmArgs = [

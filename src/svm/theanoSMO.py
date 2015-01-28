@@ -1,5 +1,9 @@
 from numpy import *
+import numpy as np
+import theano
+import theano.tensor as T
 import logging
+import smo as oldSMO
 
 def selectJrand(i,m):
     j=i #we want to select any J not equal to i
@@ -14,17 +18,58 @@ def clipAlpha(aj,H,L):
         aj = L
     return aj
 
-def kernelTrans(X, A, kernel): #calc the kernel or transform data to a higher dimensional space
-    m,n = shape(X)
-    K = mat(zeros((m,1)))
-    if kernel[0]=='lin': K = X * A.T   #linear kernel
+def fkKernelTrans(X_, kernel):
+    logging.info("Applying full theano kernel transformation to data")
+    gamma_ = 1/(-1*kernel[1]**2)
+    if kernel[0]!='rbf':
+        raise Exception("Kernel type not supported")
+
+    X = T.matrix("X")
+    tA = T.row()
+    gamma = T.dscalar("gamma")
+    
+    calcCol = lambda A: theano.scan(fn=lambda row, A : ((row - A) ** 2).sum(), sequences=X, non_sequences=A)[0]
+    colKernel = lambda A : T.exp(calcCol(A)*gamma)
+    # we need to transpose the result because the results of the per-row actions are usually columns
+    transKernelized = theano.scan(lambda row : colKernel(row), sequences=X)[0].T
+
+    # TEST: make sure the shape is (2,), because we computed one value per row based on the row vector A
+    # testEvalArgs = {tA:np.asarray([1,2,3]).reshape(1,3), X:np.arange(0,6).reshape(2,3), gamma:gamma_}
+    # testEvaled = colKernel(tA).eval(testEvalArgs)
+    # logging.info("Test evaled type: %s,  shape: %s, value: %s", str(type(testEvaled)), str(testEvaled.shape), str(testEvaled))
+
+    compKernel = theano.function(inputs=[X, gamma], outputs=transKernelized, on_unused_input='ignore')
+    return compKernel(X_, gamma_)
+
+def kernelTrans(X_, A_, kernel):
+    """
+    Apply the kernel transformation in dataset X for the features A.
+    'kernel' is a tuple with either 'lin' or 'rbf' as the first value and a possible sigma for 'rbf'
+    as the second value
+    """
+    # m,n = shape(X)
+    # K = mat(zeros((m,1)))
+    X = T.matrix("X")
+    A = T.row("A")
+    gamma = T.dscalar("sigma")
+    # linear
+    if kernel[0]=='lin':
+        gamma_ = 0
+        kernelExp = theano.dot(X, A.T)
+    # radial basis kernel
     elif kernel[0]=='rbf':
-        for j in range(m):
-            deltaRow = X[j,:] - A
-            K[j] = deltaRow*deltaRow.T
-        K = exp(K/(-1*kernel[1]**2)) #divide in NumPy is element-wise not matrix like Matlab
-    else: raise NameError('Houston We Have a Problem -- That Kernel is not recognized')
-    return K
+        gamma_ = 1/-1*kernel[1]**2
+        K, _ = theano.scan(fn=lambda row, A : ((row - A) ** 2).sum(), sequences=X, non_sequences=A)
+#        for j in range(m):
+#            deltaRow = X[j,:] - A
+#            K[j] = deltaRow*deltaRow.T
+        kernelExp = T.exp(K*gamma)
+        # return exp(K/(-1*kernel[1]**2)) # divide is element-wise        
+    # unknown
+    else:
+        raise ValueError("The kernel '%' is unknown" % kernel[0])
+    compKernel = theano.function(inputs=[X, A, gamma], outputs=kernelExp, on_unused_input='ignore')
+    return mat(compKernel(X_, A_, gamma_)).T
 
 class optStruct:
     def __init__(self,dataMatIn, classLabels, C, toler, kTup):  # Initialize the structure with the parameters
@@ -33,13 +78,21 @@ class optStruct:
         self.C = C
         self.tol = toler
         self.m = shape(dataMatIn)[0]
-        self.alphas = mat(zeros((self.m,1)))
+        self.alphas = np.mat(zeros((self.m,1)))
         self.b = 0
-        self.eCache = mat(zeros((self.m,2))) #first column is valid flag
-        self.K = mat(zeros((self.m,self.m)))
-        logging.info("Applying kernel transformation to data")
-        for i in range(self.m):
-            self.K[:,i] = kernelTrans(self.X, self.X[i,:], kTup)
+        self.eCache = np.mat(zeros((self.m,2))) #first column is valid flag
+
+        self.K = mat(fkKernelTrans(self.X, kTup))
+        logging.info("K shape: %s", str(self.K.shape))
+        
+        # Test: Check against old implementation
+        # logging.info("Applying old kernel transformation to data")
+        # oldK = mat(zeros((self.m,self.m)))
+        # for i in range(self.m):
+        #     oldK[:,i] = oldSMO.kernelTrans(self.X, self.X[i,:], kTup)
+        # logging.info("K shape: %s", str(self.K.shape))
+        # logging.info("Old an new K are equal: %s", str(np.allclose(oldK, self.K, atol=10**-5)))
+        
 
 def calcEk(oS, k):
     fXk = float(multiply(oS.alphas,oS.labelMat).T*oS.K[:,k] + oS.b)

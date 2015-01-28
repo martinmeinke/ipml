@@ -1,6 +1,7 @@
 
 import logging
-from smo import smoP, kernelTrans
+from theanoSMO import smoP, kernelTrans
+# from smo import smoP, kernelTrans
 from numpy import nonzero, shape, multiply, sign
 from Classifier import Classifier
 

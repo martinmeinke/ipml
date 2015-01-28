@@ -1,7 +1,7 @@
 
 import logging
 from Classifier import Classifier
-from sklearn.svm import NuSVC
+from sklearn.svm import SVC
 from numpy import shape
 
 class SKLSVMClassifier(Classifier):
@@ -15,9 +15,9 @@ class SKLSVMClassifier(Classifier):
         self.TrainingFileName = "SKLearnSVMTraining"
         self.Training = None
 
-    def train(self):
+    def train(self, C=10, gamma=0.0001):
         logging.info("Use scientific learn!")
-        self.Training = NuSVC()
+        self.Training = SVC(C=C, gamma=gamma)
         self.Training.fit(self._fp.TrainData, self._fp.TrainLabels.A1)
         logging.info("Finished learning")
     

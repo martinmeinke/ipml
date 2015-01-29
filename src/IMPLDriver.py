@@ -6,7 +6,7 @@ from FeatureProvider import FeatureProvider
 from DataProvider import DataProvider
 
 from FeatureExtraction.FeatureClass import FeatureExtractor
-from svm.SVMClassifier import SVMClassifier
+from svm.TheanoSVMClassifier import SVMClassifier
 from svm.SKLSVMClassifier import SKLSVMClassifier
 from rf.RFClassifier import RFClassifier
 

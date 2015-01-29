@@ -12,48 +12,39 @@ import smo as oldSMO
 def toTheanoBool(x):
     return ifelse(T.ge(x.sum(), 1), 1, 0) 
 
-def colToRow(x):
-    # dimshuffle converts the column vector into a row vector
-    return x.dimshuffle('x', 0)
-
 def selectRandomJ_(i, m):
     rstr = RandomStreams()
     # TODO: make somehow sure that the random integer is not i
-    return rstr.random_integers(None, 0, m, ndim=0)
+    return rstr.random_integers(None, 0, m -1, ndim=0)
 
 def clipAlpha_(aj, H, L):
     aj = ifelse(toTheanoBool(T.gt(aj, H)), H, aj)
     aj = ifelse(toTheanoBool(T.gt(L, aj)), L, aj)
     return aj
 
+"""
 def clipAlpha(aj,H,L):
     if aj > H:
         aj = H
     if L > aj:
         aj = L
     return aj
+"""
 
 def fkKernelTrans(X_, kernel):
     logging.info("Applying full theano kernel transformation to data")
-    gamma_ = 1/(-1*kernel[1]**2)
+
     if kernel[0]!='rbf':
         raise Exception("Kernel type not supported")
 
     X = T.matrix("X")
     gamma = T.dscalar("gamma")
     
-    calcCol = lambda A: theano.scan(fn=lambda row, A : ((row - A) ** 2).sum(), sequences=X, non_sequences=A)[0]
-    colKernel = lambda A : T.exp(calcCol(A)*gamma)
     # we need to transpose the result because the results of the per-row actions are usually columns
-    transKernelized = theano.scan(lambda row : colKernel(row), sequences=X)[0].T
-
-    # TEST: make sure the shape is (2,), because we computed one value per row based on the row vector A
-    # tA = T.row()
-    # testEvalArgs = {tA:np.asarray([1,2,3]).reshape(1,3), X:np.arange(0,6).reshape(2,3), gamma:gamma_}
-    # testEvaled = colKernel(tA).eval(testEvalArgs)
-    # logging.info("Test evaled type: %s,  shape: %s, value: %s", str(type(testEvaled)), str(testEvaled.shape), str(testEvaled))
-
+    transKernelized = theano.scan(lambda row : kernelTrans_(X, row, gamma), sequences=X)[0].T
     compKernel = theano.function(inputs=[X, gamma], outputs=transKernelized, on_unused_input='ignore')
+    
+    gamma_ = 1/(-1*kernel[1]**2)
     return compKernel(X_, gamma_)
 
 def kernelTrans(X_, A_, kernel):
@@ -62,54 +53,68 @@ def kernelTrans(X_, A_, kernel):
     'kernel' is a tuple with either 'lin' or 'rbf' as the first value and a possible sigma for 'rbf'
     as the second value
     """
-    # m,n = shape(X)
-    # K = mat(zeros((m,1)))
+    if kernel[0]!='rbf':
+        raise Exception("Kernel type not supported")
+    
     X = T.matrix("X")
-    A = T.row("A")
-    gamma = T.dscalar("sigma")
-    # linear
-    if kernel[0]=='lin':
-        gamma_ = 0
-        kernelExp = theano.dot(X, A.T)
-    # radial basis kernel
-    elif kernel[0]=='rbf':
-        gamma_ = 1/-1*kernel[1]**2
-        K, _ = theano.scan(fn=lambda row, A : ((row - A) ** 2).sum(), sequences=X, non_sequences=A)
-#        for j in range(m):
-#            deltaRow = X[j,:] - A
-#            K[j] = deltaRow*deltaRow.T
-        kernelExp = T.exp(K*gamma)
-        # return exp(K/(-1*kernel[1]**2)) # divide is element-wise        
-    # unknown
-    else:
-        raise ValueError("The kernel '%' is unknown" % kernel[0])
-    compKernel = theano.function(inputs=[X, A, gamma], outputs=kernelExp, on_unused_input='ignore')
-    return mat(compKernel(X_, A_, gamma_)).T
+    A = T.matrix("A")
+    gamma = T.dscalar("gamma")
+    kernelized = kernelTrans_(X, A, gamma)
+    
+    gamma_ = 1/(-1*kernel[1]**2)
+    compKernelized = theano.function(inputs=[X, A, gamma], outputs=kernelized, on_unused_input='ignore')
+    return compKernelized(X_, A_, gamma_)
+
+def kernelTrans_(X, A, gamma):
+    calcCol = lambda X, A : theano.scan(fn=lambda row, A : ((row - A) ** 2).sum(), sequences=X, non_sequences=A)[0]
+    return T.exp(calcCol(X, A) * gamma)
+
+class operatingSymbolStruct:
+    def __init__(self, sS):
+        self.labels = sS.labels
+        self.C = sS.C
+        self.tol = sS.tol
+        self.K = sS.K
+        self.m = sS.m
+        self.alphas = sS.alphas
+        self.b = sS.b
+        self.eCache = sS.eCache
+        
+    def retlist(self, *args):
+        return [self.labels, self.C, self.tol, self.K, self.m, self.alphas, self.b, self.eCache] + list(args)
 
 class symbolStruct:
-    def __init__(self):
-        self.labels = T.col("labels")
-        self.C = T.scalar("C")
-        self.tol = T.scalar("tol")
-        self.K = T.matrix("K")
-        self.m = T.iscalar("m")
-        self.alphas = T.col("alphas")
-        self.b = T.scalar("b")
-        self.eCache = T.matrix("eCache")
+    def __init__(self, oS):
+        self.labels = theano.shared(oS.labelMat, "labels", borrow=True)
+        self.C = theano.shared(oS.C, "C")
+        self.tol = theano.shared(oS.tol, "tol")
+        self.K = theano.shared(oS.K, "K", borrow=True)
+        self.m = theano.shared(oS.m, "m")
+        self.alphas = theano.shared(oS.alphas, "alphas", borrow=True)
+        self.b = theano.shared(oS.b, "b")
+        self.eCache = theano.shared(oS.eCache, "eCache", borrow=True)
     
-    def symlist(self):
-        return [self.labels, self.C, self.tol, self.K, self.m, self.alphas, self.b, self.eCache]
-      
-    def arglist(self, oS):
-        return [oS.labelMat, oS.C,   oS.tol,   oS.K,   oS.m,   oS.alphas,   oS.b,   oS.eCache]
+    def _symlist(self):
+        return (self.labels, self.C, self.tol, self.K, self.m, self.alphas, self.b, self.eCache)
     
-    def retlist(self, *args):
-        return self.symlist() + [T.as_tensor_variable(x) for x in args]
-    
-    def saveResults(self, oS, results):
-        numargs = len(self.arglist(oS))
-        oS.labelMat, oS.C, oS.tol, oS.K, oS.m, oS.alphas, oS.b, oS.eCache = results[:numargs]
-        return results[numargs:]
+    def updatesOf(self, expression):
+        syms = self._symlist()
+        numsyms = len(syms)
+        return [(syms[i], expression[i]) for i in range(0, numsyms)]
+        
+    def returnValsOf(self, expression):
+        numsyms = len(self._symlist())
+        return expression[numsyms:]
+
+    def save(self, oS):
+        oS.labelMat = self.labels.get_value()
+        oS.C = self.C.get_value()
+        oS.tol = self.tol.get_value()
+        oS.K = self.K.get_value()
+        oS.m = self.m.get_value()
+        oS.alphas = self.alphas.get_value()
+        oS.b = self.b.get_value()
+        oS.eCache = self.eCache.get_value()
 
 class optStruct:
     def __init__(self,dataMatIn, classLabels, C, toler, kTup):  # Initialize the structure with the parameters
@@ -119,7 +124,7 @@ class optStruct:
         self.tol = toler
         self.m = shape(dataMatIn)[0]
         self.alphas = np.mat(zeros((self.m,1)))
-        self.b = 0
+        self.b = 0.0
         self.eCache = np.mat(zeros((self.m,2))) #first column is valid flag
 
         self.K = mat(fkKernelTrans(self.X, kTup))
@@ -135,8 +140,9 @@ class optStruct:
 
 def calcEk_(sS, k):
     # take [0] index as the result is a vector with 0 element
-    return (T.dot(colToRow(sS.alphas * sS.labels), sS.K[:,k]) + sS.b - sS.labels[k])[0]
+    return (T.dot((sS.alphas * sS.labels).T, sS.K[:,k]) + sS.b - sS.labels[k])[0]
 
+"""
 def calcEk(oS, k_):
     sS = symbolStruct()
     k = T.iscalar("k")
@@ -146,10 +152,11 @@ def calcEk(oS, k_):
     res = compEk(oS.labelMat, oS.alphas, oS.K, oS.b, k_)
     logging.debug("E[%s] is %s", str(k_), str(res))
     return res
+"""
 
 def selectJ_(sS, i, Ei):
     # make sure error of i is cached
-    sS.eCache = T.set_subtensor(sS.eCache[i,:], [1, Ei], inplace=True)
+    sS.eCache = T.set_subtensor(sS.eCache[i,:], [1, Ei])
 
     # code to check error cache list for error with biggest delta to Ei
     validEcacheList = sS.eCache[:,0].nonzero()[0]
@@ -163,6 +170,7 @@ def selectJ_(sS, i, Ei):
     # either return a j selected by cached errors or random
     return ifelse(T.gt(validEcacheList.shape[0], 1), selectMaxError, randomJAndError)
 
+"""
 def selectJ(i_, oS, Ei_):
     sS = symbolStruct()
     Ei = T.scalar()
@@ -179,16 +187,15 @@ def selectJ(i_, oS, Ei_):
 
     
 def updateEk(oS, k):#after any alpha has changed update the new value in the cache
-    # use T.set_subtensor(oS.eCache[k,:], [1,Ek], inplace=True)
     Ek = calcEk(oS, k)
     logging.debug("Updating eCache[%s,:] to %s", str(k), str(Ek))
     oS.eCache[k,:] = [1,Ek]
+"""
 
 def updateEk_(sS, k):#after any alpha has changed update the new value in the cache
-    # use T.set_subtensor(oS.eCache[k,:], [1,Ek], inplace=True)
     Ek = calcEk_(sS, k)
     # logging.debug("Updating eCache[%s,:] to %s", str(k), str(Ek))
-    T.set_subtensor(sS.eCache[k,:], [1,Ek], inplace=True)
+    T.set_subtensor(sS.eCache[k,:], [1,Ek])
 
 
 # theano implementation of innerL is split in several functions to support early exit and keep order
@@ -231,7 +238,7 @@ def innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta):
     # logging.debug("j is %s, Ej is %s, alphas[j] shape: %s, update shape: %s", str(j), str(Ej), str(np.shape(oS.alphas[j])), str(np.shape(update)))
     # update alpha
     updatedAlpha = sS.alphas[j] - sS.labels[j]*(Ei - Ej)/eta
-    sS.alphas = T.set_subtensor(sS.alphas[j], clipAlpha_(updatedAlpha, H, L), inplace = True)
+    sS.alphas = T.set_subtensor(sS.alphas[j], clipAlpha_(updatedAlpha, H, L))
     updateEk_(sS, j) # add error for alpha[j]
    
     alphaJHasntChanged = toTheanoBool(T.lt(T.abs_(sS.alphas[j] - alphaJold), 0.00001))
@@ -244,7 +251,7 @@ def innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta):
 
 def innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold):
     # update alphas[i] by the same amount as alphas[j]
-    sS.alphas = T.set_subtensor(sS.alphas[i], sS.alphas[i] + (sS.labels[j]*sS.labels[i]*(alphaJold - sS.alphas[j])), inplace=True)
+    sS.alphas = T.set_subtensor(sS.alphas[i], sS.alphas[i] + (sS.labels[j]*sS.labels[i]*(alphaJold - sS.alphas[j])))
     # update error for new alpha[i]
     updateEk_(sS, i)
     
@@ -255,7 +262,7 @@ def innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold):
     # confitions: use * instead of "and" and + instead of "or"
     alphaInRange = lambda x : toTheanoBool(T.gt(sS.alphas[x], 0) * T.lt(sS.alphas[x], sS.C))
     checkForB2 = ifelse(alphaInRange(j), b2, (b1 + b2)/2.0 )
-    sS.b = ifelse(alphaInRange(j), b1, checkForB2)
+    sS.b = ifelse(alphaInRange(j), b1, checkForB2)[0] # 0 index because the values are in form of a one element vector
     
     return sS.retlist(1)
 
@@ -264,45 +271,63 @@ def innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold):
 
 
 def innerL(i_, oS):
-    sS = symbolStruct()
+    sS = symbolStruct(oS)
+    oSS = operatingSymbolStruct(sS)
     i = T.iscalar("i")
     
-    innerLUpdate = innerL_(sS, i)
+    innerLUpdate = innerL_(oSS, i)
     # theano.pp(innerLUpdate[0])
     logging.info("Compiling innerL theano function")
-    insyms = sS.symlist() + [i]
-    logging.debug("insyms to innerL: %s", str(insyms))
-    logging.debug("outsyms of innerLUpdate: %s", str(innerLUpdate))
-    compInnerL = theano.function(insyms, innerLUpdate, on_unused_input='ignore')
+    updates = sS.updatesOf(innerLUpdate)
+    outputs = sS.returnValsOf(innerLUpdate)
+    logging.debug("updates of innerL: %s", str(updates))
+    logging.debug("outputs of innerL: %s", str(outputs))
+    compInnerL = theano.function([i], outputs, updates=updates, on_unused_input='ignore')
     logging.info("Compilation finished")
     
-    args = sS.arglist(oS) + [i]
-    logging.debug("Args to innerL: %s", str(args))
-    return sS.saveResults(oS, compInnerL(*args))[0]
+    logging.debug("Args to innerL: %s", str([i_]))
+    res = compInnerL(i_)
+    # save result from shared to oS
+    sS.save(oS)
+       
+    return res[0]
     
     
 
 def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Platt SMO
     oS = optStruct(dataMatIn,classLabels,C,toler, kTup)
+    sS = symbolStruct(oS)
+    oSS = operatingSymbolStruct(sS)
+    i_ = T.iscalar("i")
+    
+    
+    innerLUpdate = innerL_(oSS, i_)
+    logging.info("Compiling innerL theano function")
+    updates = sS.updatesOf(innerLUpdate)
+    outputs = sS.returnValsOf(innerLUpdate)
+    logging.debug("updates of innerL: %s", str(updates))
+    logging.debug("outputs of innerL: %s", str(outputs))
+    compInnerL = theano.function([i_], outputs, updates=updates, on_unused_input='ignore')
+    logging.info("Compilation finished")
+    
     iteration = 0
     entireSet = True; alphaPairsChanged = 0
     logging.info("Starting main loop")
     while iteration < maxIter and (alphaPairsChanged > 0 or entireSet):
         alphaPairsChanged = 0
-        if entireSet:   #go over all
-            for i in range(oS.m):
-                alphaPairsChanged += innerL(i,oS)
-                logging.info("fullSet, iteration: %d i:%d, pairs changed %d" % (iteration,i,alphaPairsChanged))
-            iteration += 1
-        else: #go over non-bound (railed) alphas
-            nonBoundIs = nonzero((oS.alphas.A > 0) * (oS.alphas.A < C))[0]
-            for i in nonBoundIs:
-                alphaPairsChanged += innerL(i,oS)
-                logging.info("non-bound, iteration: %d i:%d, pairs changed %d" % (iteration,i,alphaPairsChanged))
-            iteration += 1
+        bounds = range(oS.m) if entireSet else nonzero((sS.alphas.get_value() > 0) * (sS.alphas.get_value() < C))[0]
+        setName = "fullSet" if entireSet else "non-bound"
+        runI = 0
+        for i in bounds:
+            runI += 1
+            alphaPairsChanged += compInnerL(i)[0]
+            if runI % 100 == 0:
+                logging.info("%s, iteration: %d i:%d, pairs changed %d" % (setName, iteration,i,alphaPairsChanged))
+        
+        logging.info("Finished %s, iteration number: %d, pairs changed %d" % (setName, iteration, alphaPairsChanged))
+        iteration += 1
         if entireSet:
             entireSet = False #toggle entire set loop
         elif alphaPairsChanged == 0:
             entireSet = True
-        logging.info("iteration number: %d" % iteration)
-    return oS.b,oS.alphas
+    return sS.b.get_value(), sS.alphas.get_value()

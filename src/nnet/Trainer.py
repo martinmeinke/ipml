@@ -5,6 +5,7 @@ import theano
 import sys
 import math
 import os
+import json
 import theano.tensor as T
 import time
 from random import randrange
@@ -74,10 +75,14 @@ class Trainer(object):
 
     dataset_manager = DatasetManager("../../serialized_datasets")
     datasets = None
-
+    
+    model_name = ""
+    
     img_width = 0
     img_height = 0
 
+    sets = None
+    
     # allocate symbolic variables for the data
     x = None
     y = None
@@ -99,11 +104,15 @@ class Trainer(object):
     validation_model = None
     train_validation_model = None
     training_model = None
+    
+    # TODO: not implemented yet
+    validation_enabled = True
+    test_enabled = True
 
     network = None
 
     # training parameters
-    patience = 30000                # run for this many iterations regardless
+    patience = 60000                # run for this many iterations regardless
     # wait this much longer when a new best is found
     patience_increase = 2
     # a relative improvement of this much is considered significant
@@ -136,9 +145,11 @@ class Trainer(object):
         '''
         lowers the learning rate, as the learning proceeds
         '''
-        self.learning_rate = max(helpers.lr_decay(self.learning_rate_lambda,
-                                                  self.learning_rate_t0,
-                                                  decrease_speed, t), 0.0001)
+#         self.learning_rate = max(helpers.lr_decay(self.learning_rate_lambda,
+#                                                   self.learning_rate_t0,
+#                                                   decrease_speed, t), 0.000001)
+
+        self.learning_rate = max(helpers.lr_decay2(self.learning_rate_lambda, t), 0.000001)
 
         logger.info("Current learning rate: {}".format(
                     self.learning_rate))
@@ -151,7 +162,37 @@ class Trainer(object):
         plt.plot(self.epoch, y, self.PLOT_SYMBOLS[
                  series], label=series if self.epoch == 1 else "")
 
-    def run_training(self):
+    def early_stopping(self, rule=1):
+        if rule == 0:
+            NUM_WORSE_EPOCHS = 5
+            count = 0
+            val = self.results["validation"]
+            if len(val) > NUM_WORSE_EPOCHS:
+                # validation error worsened 3 times in a row
+                for i in range(0, NUM_WORSE_EPOCHS):
+                    # error got worse
+                    if val[-1-i] > val[-2-i]:
+                        count += 1
+                if NUM_WORSE_EPOCHS == count:
+                    return True
+        if rule == 1:
+            NUM_WORSE_EPOCHS = 20
+            val = self.results["validation"]
+            
+            if len(val) == 0:
+                return False
+            
+            bestidx = numpy.argmin(val)
+            curridx = len(val) - 1
+            
+            # return true if the result didn't improve for NWE epochs
+            if curridx - bestidx > NUM_WORSE_EPOCHS - 1:
+                return True
+            
+        return False
+
+    def run_training(self, dataset_manager=None):
+        self.results = {"training": [], "validation": [], "best_test": [], "lr": []}
         start_time = time.clock()
         # TODO: plot lr aswell
 #         gs = gridspec.GridSpec(2, 1, width_ratios=[3, 1]) 
@@ -173,10 +214,8 @@ class Trainer(object):
 
         try:
             while (self.epoch < self.n_epochs) and (not done_looping):
-
-                helpers.plot_kernels(self.network.layers,
-                                     layerids=(0, 2, 4),
-                                     figids=(2, 3, 4))
+                
+                helpers.plot_kernels(self.network.layers, self.model_name)
 
                 if self.learning_rate_decay:
                     # decrease the learning rate to yield better results
@@ -202,7 +241,7 @@ class Trainer(object):
                     # monitor changes in one specific minibatch
                     if minibatch_index == 0:
                         # only for debugging
-                        logger.debug(
+                        logger.info(
                             "Regularization cost: {}".format(regularization))
                         logger.info("Training model cost: {}".format(cost_ij))
 
@@ -214,14 +253,15 @@ class Trainer(object):
                         logger.debug(
                             "Training losses: {}".format(training_losses))
 
+                        this_training_loss = numpy.mean(training_losses)
+
                         # compute zero-one loss on validation set
                         validation_losses = [self.validation_model(i) for i
                                              in xrange(self.n_valid_batches)]
 
                         logger.debug(
-                            "Training losses: {}".format(validation_losses))
+                            "Validation losses: {}".format(validation_losses))
 
-                        this_training_loss = numpy.mean(training_losses)
                         this_validation_loss = numpy.mean(validation_losses)
 
                         print("epoch {}, minibatch {}/{}, training_error: {}, "
@@ -240,6 +280,10 @@ class Trainer(object):
                         # if we got the best validation score until now
                         if this_validation_loss < self.best_validation_loss:
 
+                            if dataset_manager is not None:
+                                # store the trained model
+                                dataset_manager.store(self.network.model_params, self.model_name)
+
                             # improve patience if loss improvement is good
                             # enough
                             if this_validation_loss < self.best_validation_loss *  \
@@ -251,34 +295,42 @@ class Trainer(object):
                             self.best_validation_loss = this_validation_loss
                             self.best_iter = iternum
 
-                            # test it on the test set
-                            test_losses = [
-                                self.test_model(i)[1]
-                                for i in xrange(self.n_test_batches)
-                            ]
+                            if self.test_enabled:
+                                # test it on the test set
+                                test_losses = [
+                                    self.test_model(i)[1]
+                                    for i in xrange(self.n_test_batches)
+                                ]
+    
+                                # test it on the test set
+                                misclassified_images = [
+                                    self.test_model(i)[0]
+                                    for i in xrange(self.n_test_batches)
+                                ]
+    
+                                helpers.plot_misclassified_images(
+                                    misclassified_images, self.datasets[2], edgelen=self.img_width)
+    
+                                self.test_score = numpy.mean(test_losses)
+                                print(('     epoch %i, minibatch %i/%i, test error of '
+                                       'best model %f %%') %
+                                      (self.epoch, minibatch_index + 1, self.n_train_batches,
+                                       self.test_score * 100.))
+    
+                                logger.info(
+                                    "Patience: {}, iter: {}".format(self.patience, iternum))
+    
+                                # self.plot_datapoint("Test", self.test_score)
+                                plt.draw()
 
-                            # test it on the test set
-                            misclassified_images = [
-                                self.test_model(i)[0]
-                                for i in xrange(self.n_test_batches)
-                            ]
+                        # store results of this iteration
+                        self.results["training"].append(this_training_loss)
+                        self.results["validation"].append(this_validation_loss)
+                        self.results["best_test"].append(self.test_score)
+                        self.results["lr"].append(self.learning_rate)
 
-                            helpers.plot_misclassified_images(
-                                misclassified_images, self.datasets[2], edgelen=self.img_width)
-
-                            self.test_score = numpy.mean(test_losses)
-                            print(('     epoch %i, minibatch %i/%i, test error of '
-                                   'best model %f %%') %
-                                  (self.epoch, minibatch_index + 1, self.n_train_batches,
-                                   self.test_score * 100.))
-
-                            logger.info(
-                                "Patience: {}, iter: {}".format(self.patience, iternum))
-
-                            # self.plot_datapoint("Test", self.test_score)
-                            plt.draw()
                     # break training, afrer we've been patient enough
-                    if self.patience <= iternum:
+                    if self.patience <= iternum or self.early_stopping():
                         self.patience += 1
                         done_looping = True
                         break
@@ -291,9 +343,15 @@ class Trainer(object):
             format(self.learning_rate, self.batch_size, self.test_score, self.n_train_samples)
         plt.title(plottxt)
 
-        plotname = "../../plots/{}.png".format(time.strftime("%c"))
+        now = time.strftime("%c")
+        plotname = "../../plots/{}_{}.png".format(now, self.model_name)
+        dataname = "../../plots/{}_{}.json".format(now, self.model_name)
+        
         logger.info("Saving plot: {}".format(plotname))
         plt.savefig(plotname)
+        with open(dataname, "w") as f:
+            f.write(json.dumps(self.results))
+        
 
         end_time = time.clock()
         logger.info('Optimization complete.')
@@ -379,7 +437,7 @@ class Trainer(object):
             (param_i, param_i - self.learning_rate * grad_i)
             for param_i, grad_i in zip(self.network.model_params, self.network.gradients)
         ]
-
+        
         self.training_model = theano.function(
             [self.index],
             [self.network.cost, self.network.regularization_term],
@@ -394,9 +452,9 @@ class Trainer(object):
         # use the negative log likelihood of the softmax layer
         logreg_layer = self.network.layers[-1]
         self.network.regularization_term = logreg_layer.regularization(
-            self.network.regularized_params)
+            self.network.regularized_params, self.network.regularized_params_weights)
         self.network.cost = logreg_layer.nll(
-            self.y) + logreg_layer.regularization(self.network.regularized_params)
+            self.y) + logreg_layer.regularization(self.network.regularized_params, self.network.regularized_params_weights)
         self.network.errorslist = self.network.layers[-1].errorslist(self.y)
         self.network.errors = self.network.layers[-1].errors(self.y)
 
@@ -408,33 +466,44 @@ class Trainer(object):
             self.create_training_model()
             self.create_validation_model()
             self.create_train_validation_model()
-            self.create_test_model()
+            if self.test_enabled:
+                self.create_test_model()
         elif run_mode == 1:
             self.create_prediction_model()
 
     def compute_training_parameters(self):
         train_set_x = self.datasets[0][0]
         valid_set_x = self.datasets[1][0]
-        test_set_x = self.datasets[2][0]
+        if self.test_enabled:
+            test_set_x = self.datasets[2][0]
 
         # start-snippet-1
         self.x = T.matrix('x')  # the data is presented as rasterized images
         self.y = T.ivector('y')  # the labels are presented as 1D vector of
         # [int] labels
-
+        
+        #self.sets[0][0].shape[0]
         self.n_train_samples = train_set_x.get_value(borrow=True).shape[0]
         self.n_valid_samples = valid_set_x.get_value(borrow=True).shape[0]
-        self.n_test_samples = test_set_x.get_value(borrow=True).shape[0]
+        if self.test_enabled:
+            self.n_test_samples = test_set_x.get_value(borrow=True).shape[0]
 
         logger.info("Set sizes:\n\tTrain: {}\n\tValid: {}\n\tTest: {}"
                     .format(self.n_train_samples, self.n_valid_samples, self.n_test_samples))
 
         self.n_train_batches = self.n_train_samples / self.batch_size
         self.n_valid_batches = self.n_valid_samples / self.batch_size
-        self.n_test_batches = self.n_test_samples / self.batch_size
+        if self.test_enabled:
+            self.n_test_batches = self.n_test_samples / self.batch_size
 
         # make sure, that the batch size isn't too big
-        assert self.n_train_batches > 0 and self.n_valid_batches > 0 and self.n_test_batches > 0
+        assert self.n_train_batches > 0
+
+        if self.validation_enabled:
+            assert self.n_valid_batches > 0
+
+        if self.test_enabled:
+            assert self.n_test_batches > 0
 
         self.index = T.lscalar()  # index to a [mini]batch
 
@@ -467,7 +536,7 @@ class Trainer(object):
 
             # need to create a flat representation of the image
             reshape_dims = (test_set.shape[0], flat_img_len)
-            test_set = numpy.reshape(test_set.astype(numpy.float16) / 255, reshape_dims)
+            test_set = numpy.reshape(test_set.astype(numpy.float16, copy=False) / 255, reshape_dims)
 
             print test_set.shape
             self.dataset_manager.store(test_set, dataset, False)
@@ -500,50 +569,64 @@ class Trainer(object):
 
         if self.dataset_manager.dataset_available(stored_ds_name):
             logger.info('loading datasets...')
-            sets = self.dataset_manager.load(stored_ds_name)
+            self.sets = self.dataset_manager.load(stored_ds_name)
 
-            train_set, valid_set, test_set = sets
+            # TODO: DRY
+            train_set = self.sets.next()
+            valid_set = self.sets.next()
+            
+            if self.test_enabled:
+                test_set = self.sets.next()
+                
             el = int(math.sqrt(train_set[0][1].shape[0]))
             self.img_width = el
             self.img_height = el
         else:
             logger.info('creating datasets...')
-            sets = create_samples(dataset, partitioning, partial, train_enhanced=train_enhanced)
+            self.sets = create_samples(dataset, partitioning, partial, train_enhanced=train_enhanced)
+
+            logger.info('grayscale and typeset datasets...')
 
             # train_set[1].shape  (150,)
             # train_set[0].shape  (150,128,128,3)
-            self.img_width = sets[0][0].shape[1]
-            self.img_height = sets[0][0].shape[2]
+            self.img_width = self.sets[0][0].shape[1]
+            self.img_height = self.sets[0][0].shape[2]
 
             # for each set
-            for i in range(len(sets)):
+            for i in range(len(self.sets)):
                 # grayscale images
-                gray = map(rgb2gray, sets[i][0])
-                sets[i] = (numpy.asarray(gray), numpy.asarray(sets[i][1], int8))
+                self.sets[i] = (numpy.asarray(map(rgb2gray, self.sets[i][0])), numpy.asarray(self.sets[i][1], int8))
 
                 flat_img_len = self.img_width * self.img_height
 
                 # need to create a flat representation of the image
-                reshape_dims = (sets[i][0].shape[0], flat_img_len)
-                sets[i] = (
-                    numpy.reshape(sets[i][0].astype(numpy.float16) / 255,
+                reshape_dims = (self.sets[i][0].shape[0], flat_img_len)
+                self.sets[i] = (
+                    numpy.reshape(self.sets[i][0].astype(numpy.float16, copy=False) / 255,
                                   reshape_dims),
-                    sets[i][1])
+                    self.sets[i][1])
+                
+            train_set = self.sets[0]
+            valid_set = self.sets[1]
+            
+            if self.test_enabled:
+                test_set = self.sets[2]
 
-            train_set, valid_set, test_set = sets
-            self.dataset_manager.store(sets, stored_ds_name)
+            self.dataset_manager.store(self.sets, stored_ds_name)
 
         logger.info(
             "Img dimensions: {}/{}".format(self.img_width, self.img_height))
+        
+        
 
-        for s in sets:
+        for s in self.sets:
             logger.info(
                 "Set details: {}".format(helpers.set_details(s)))
 
         if logger.getEffectiveLevel() is logging.DEBUG:
             # view a couple of images to confirm that the class lables are
             # correct
-            for s in sets:
+            for s in self.sets:
                 for i in range(5):
                     random_index = randrange(0, len(s[0]))
                     plot_qimage_grayscale(
@@ -557,12 +640,16 @@ class Trainer(object):
         # target to the example with the same index in the input.
 
         # move the data to shared theano datasets
-        test_set_x, test_set_y = shared_dataset(test_set)
-        valid_set_x, valid_set_y = shared_dataset(valid_set)
         train_set_x, train_set_y = shared_dataset(train_set)
+        valid_set_x, valid_set_y = shared_dataset(valid_set)
+        
+        if self.test_enabled:
+            test_set_x, test_set_y = shared_dataset(test_set)
 
-        datasets = [(train_set_x, train_set_y), (valid_set_x, valid_set_y),
-                    (test_set_x, test_set_y)]
+            datasets = [(train_set_x, train_set_y), (valid_set_x, valid_set_y),
+                        (test_set_x, test_set_y)]
+        else:
+            datasets = [(train_set_x, train_set_y), (valid_set_x, valid_set_y)] 
 
         self.datasets = datasets
 

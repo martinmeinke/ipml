@@ -26,6 +26,7 @@ class Network(object):
         '''
         self.model_params = []
         self.regularized_params = []
+        self.regularized_params_weights = []
         self.layers = []
 
         self.rng = numpy.random.RandomState(None)
@@ -60,8 +61,16 @@ class Network(object):
         for layer in self.layers:
             self.model_params += layer.params
             self.regularized_params += layer.regularized_params
+            self.regularized_params_weights += layer.regularized_params_weights
 
-    def restore_params(self):
+        logger.info("Regularized params: {}".format(self.regularized_params))
+
+    def restore_params(self, serialized_plist):
+        
+        self.model_params = []
+        for x in serialized_plist:
+            self.model_params.append(x)
+            
         param = 0
 
         for layer in self.layers:

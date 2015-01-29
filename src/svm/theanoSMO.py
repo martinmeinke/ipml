@@ -7,6 +7,8 @@ from theano.ifelse import ifelse
 import logging
 import smo as oldSMO
 
+def toTheanoBool(x):
+    return ifelse(T.ge(x.sum(), 1), 1, 0) 
 
 def colToRow(x):
     # dimshuffle converts the column vector into a row vector
@@ -17,8 +19,12 @@ def selectRandomJ_(i, m):
     # TODO: make somehow sure that the random integer is not i
     return rstr.random_integers(None, 0, m, ndim=0)
 
+def clipAlpha_(aj, H, L):
+    aj = ifelse(toTheanoBool(T.gt(aj, H)), H, aj)
+    aj = ifelse(toTheanoBool(T.gt(L, aj)), L, aj)
+    return aj
+
 def clipAlpha(aj,H,L):
-    # in theano: aj = ifelse(T.gt(aj, H), H, aj); aj = ifelse(T.gt(L, aj), L, aj);
     if aj > H:
         aj = H
     if L > aj:
@@ -84,10 +90,21 @@ class symbolStruct:
         self.C = T.scalar("C")
         self.tol = T.scalar("tol")
         self.K = T.matrix("K")
-        self.m = self.K.shape[0]
-        self.alphas = T.col()
-        self.b = T.scalar()
-        self.eCache = T.matrix()
+        self.m = T.iscalar("m")
+        self.alphas = T.col("alphas")
+        self.b = T.scalar("b")
+        self.eCache = T.matrix("eCache")
+    
+    def symlist(self):
+        return [self.labels, self.C, self.tol, self.K, self.m, self.alphas, self.b, self.eCache]
+    
+    def arglist(self, oS):
+        return [oS.labelMat, oS.C,   oS.tol,   oS.K,   oS.m,   oS.alphas,   oS.b,   oS.eCache]
+    
+    def saveResults(self, oS, results):
+        numargs = len(self.arglist(oS))
+        oS.labelMat, oS.C, oS.tol, oS.K, oS.m, oS.alphas, oS.b, oS.eCache = results[:numargs]
+        return results[numargs:]
 
 class optStruct:
     def __init__(self,dataMatIn, classLabels, C, toler, kTup):  # Initialize the structure with the parameters
@@ -131,12 +148,12 @@ def selectJ_(sS, i, Ei):
 
     # code to check error cache list for error with biggest delta to Ei
     validEcacheList = sS.eCache[:,0].nonzero()[0]
-    deltaErrors = theano.scan(lambda k: abs(Ei - calcEk_(sS.alphas, sS.labels, sS.K, sS.b, k)), sequences=[validEcacheList])[0]
+    deltaErrors = theano.scan(lambda k: abs(Ei - calcEk_(sS, k)), sequences=[validEcacheList])[0]
     selectMaxError = T.max_and_argmax(deltaErrors)
     
-    # if we donÄt have cached errors, yet, we need code to select a random j and Ej
+    # if we don't have cached errors, yet, we need code to select a random j and Ej
     randomJ = selectRandomJ_(i, sS.m)
-    randomJAndError = [calcEk_(sS.alphas, sS.labels, sS.K, sS.b, randomJ), randomJ]
+    randomJAndError = [calcEk_(sS, randomJ), randomJ]
 
     # either return a j selected by cached errors or random
     return ifelse(T.gt(validEcacheList.shape[0], 1), selectMaxError, randomJAndError)
@@ -162,60 +179,83 @@ def updateEk(oS, k):#after any alpha has changed update the new value in the cac
     logging.debug("Updating eCache[%s,:] to %s", str(k), str(Ek))
     oS.eCache[k,:] = [1,Ek]
 
-def innerL(i, oS):
-    Ei = calcEk(oS, i)
-    if (oS.labelMat[i]*Ei >= -oS.tol or oS.alphas[i] >= oS.C) and \
-       (oS.labelMat[i]*Ei <=  oS.tol or oS.alphas[i] < 0):
-        return 0
+def updateEk_(sS, k):#after any alpha has changed update the new value in the cache
+    # use T.set_subtensor(oS.eCache[k,:], [1,Ek], inplace=True)
+    Ek = calcEk_(sS, k)
+    # logging.debug("Updating eCache[%s,:] to %s", str(k), str(Ek))
+    T.set_subtensor(sS.eCache[k,:], [1,Ek], inplace=True)
 
-    Ej, j = selectJ(i, oS, Ei) # both return values are ndarrray, we need to unpack them
-    Ej = Ej.item(0)
-    j = j.item(0)
+
+# theano implementation of innerL is split in several functions to support early exit and keep order
+def innerL_(sS, i):
+    Ei = calcEk_(sS, i)
+    
+    # use "+" instead of "or" and "*" instead of "and"
+    checkUselessAlpha1 = T.ge(sS.labels[i] * Ei, -sS.tol) + T.ge(sS.alphas[i], sS.C)
+    checkUselessAlpha2 = T.le(sS.labels[i]*Ei, sS.tol) + T.lt(sS.alphas[i], 0)
+    return ifelse(toTheanoBool(checkUselessAlpha1 * checkUselessAlpha2), sS.symlist() + [0], innerL_alphaInRange_(sS, i, Ei))
+
+def innerL_alphaInRange_(sS, i, Ei):
+    Ej, j = selectJ_(sS, i, Ei) # both return values are ndarrray, we need to unpack them
+    # Ej = Ej.item(0)
+    # j = j.item(0)
     # oldJ, oldEj = oldSMO.selectJ(i, oS, Ei)
     # logging.debug("New Ej: %s, new j: %s; Old Ej: %s, old j: %s", str(Ej), str(j), str(oldEj), str(oldJ))
     # logging.debug("New Ej type: %s, new j type: %s; Old Ej type: %s, old j type: %s", str(type(Ej)), str(type(j)), str(type(oldEj)), str(type(oldJ)))
+
+    ijAreEqualClass = toTheanoBool(T.eq(sS.labels[i], sS.labels[j]))
+    L = T.maximum(0,    ifelse(ijAreEqualClass,   sS.alphas[j] + sS.alphas[i] - sS.C,    sS.alphas[j] - sS.alphas[i]))
+    H = T.minimum(sS.C, ifelse(ijAreEqualClass,   sS.alphas[j] + sS.alphas[i],           sS.C + sS.alphas[j] - sS.alphas[i]))
+
+    eta = 2.0 * sS.K[i,j] - sS.K[i,i] - sS.K[j,j] #changed for kernel
+    hasBadEtaAndRanges = toTheanoBool(T.eq(L, H) + T.ge(eta, 0))
+    return ifelse(hasBadEtaAndRanges, sS.symlist() + [0], innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta))
+
+def innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta):
+    alphaIold = sS.alphas[i].copy()
+    alphaJold = sS.alphas[j].copy()
+
+    # logging.debug("j is %s, Ej is %s, alphas[j] shape: %s, update shape: %s", str(j), str(Ej), str(np.shape(oS.alphas[j])), str(np.shape(update)))
+    # update alpha
+    updatedAlpha = sS.alphas[j] - sS.labels[j]*(Ei - Ej)/eta
+    sS.alphas = T.set_subtensor(sS.alphas[j], clipAlpha_(updatedAlpha, H, L), inplace = True)
+    updateEk_(sS, j) # add error for alpha[j]
+   
+    alphaJHasntChanged = toTheanoBool(T.lt(T.abs_(sS.alphas[j] - alphaJold), 0.00001))
+    return ifelse(alphaJHasntChanged, sS.symlist() + [0], innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold))
+
+def innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold):
+    # update alphas[i] by the same amount as alphas[j]
+    sS.alphas = T.set_subtensor(sS.alphas[i], sS.alphas[i] + (sS.labels[j]*sS.labels[i]*(alphaJold - sS.alphas[j])), inplace=True)
+    # update error for new alpha[i]
+    updateEk_(sS, i)
+    
+    # update b
+    b1 = sS.b - Ei- sS.labels[i] * (sS.alphas[i] - alphaIold) * sS.K[i,i] - sS.labels[j] * (sS.alphas[j] - alphaJold) * sS.K[i,j]
+    b2 = sS.b - Ej- sS.labels[i] * (sS.alphas[i] - alphaIold) * sS.K[i,j] - sS.labels[j] * (sS.alphas[j] - alphaJold) * sS.K[j,j]
+    
+    # confitions: use * instead of "and" and + instead of "or"
+    alphaInRange = lambda x : toTheanoBool(T.gt(sS.alphas[x], 0) * T.lt(sS.alphas[x], sS.C))
+    checkForB2 = ifelse(alphaInRange(j), b2, (b1 + b2)/2.0 )
+    sS.b = ifelse(alphaInRange(j), b1, checkForB2)
+    
+    return sS.symlist() + [1]
+# end of theano innerL implementation
+
+
+
+def innerL(i_, oS):
+    sS = symbolStruct()
+    i = T.iscalar("i")
+    
+    innerLUpdate = innerL_(sS, i)
+    symlist = sS.symlist()
+    compInnerL = theano.function(symlist + [i], innerLUpdate, on_unused_input='ignore')
+    
+    args = sS.arglist(oS) + [i]
+    return sS.saveResults(oS, compInnerL(*args))[0]
     
     
-    alphaIold = oS.alphas[i].copy()
-    alphaJold = oS.alphas[j].copy()
-
-    if oS.labelMat[i] != oS.labelMat[j]:
-        L = max(0, oS.alphas[j] - oS.alphas[i])
-        H = min(oS.C, oS.C + oS.alphas[j] - oS.alphas[i])
-    else:
-        L = max(0, oS.alphas[j] + oS.alphas[i] - oS.C)
-        H = min(oS.C, oS.alphas[j] + oS.alphas[i])
-    if L==H:
-        logging.info("L==H")
-        return 0
-
-    eta = 2.0 * oS.K[i,j] - oS.K[i,i] - oS.K[j,j] #changed for kernel
-    if eta >= 0:
-        logging.info("eta>=0")
-        return 0
-
-    update =  oS.alphas[j] - oS.labelMat[j]*(Ei - Ej)/eta
-    logging.debug("j is %s, Ej is %s, alphas[j] shape: %s, update shape: %s", str(j), str(Ej), str(np.shape(oS.alphas[j])), str(np.shape(update)))
-    oS.alphas[j] = update
-    oS.alphas[j] = clipAlpha(oS.alphas[j],H,L)
-    updateEk(oS, j) #added this for the Ecache
-    if abs(oS.alphas[j] - alphaJold) < 0.00001:
-        logging.info("j not moving enough")
-        return 0
-
-    oS.alphas[i] += oS.labelMat[j]*oS.labelMat[i]*(alphaJold - oS.alphas[j])#update i by the same amount as j
-    updateEk(oS, i) #added this for the Ecache                    #the update is in the oppostie direction
-    b1 = oS.b - Ei- oS.labelMat[i]*(oS.alphas[i]-alphaIold)*oS.K[i,i] - oS.labelMat[j]*(oS.alphas[j]-alphaJold)*oS.K[i,j]
-    b2 = oS.b - Ej- oS.labelMat[i]*(oS.alphas[i]-alphaIold)*oS.K[i,j] - oS.labelMat[j]*(oS.alphas[j]-alphaJold)*oS.K[j,j]
-    if 0 < oS.alphas[i] and oS.C > oS.alphas[i]:
-        oS.b = b1
-    elif 0 < oS.alphas[j] and oS.C > oS.alphas[j]:
-        oS.b = b2
-    else:
-        oS.b = (b1 + b2)/2.0
-    # TODO: find a solution for that workaround so b is never a 1x1 matrix
-    oS.b = oS.b.item(0)
-    return 1
 
 def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Platt SMO
     oS = optStruct(dataMatIn,classLabels,C,toler, kTup)

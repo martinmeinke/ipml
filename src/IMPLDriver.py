@@ -7,8 +7,10 @@ from DataProvider import DataProvider
 
 from FeatureExtraction.FeatureClass import FeatureExtractor
 from svm.TheanoSVMClassifier import SVMClassifier
+# from svm.SVMClassifier import SVMClassifier
 from svm.SKLSVMClassifier import SKLSVMClassifier
 from rf.RFClassifier import RFClassifier
+from Utility import TimeManager
 
 class IMPLRunConfiguration(object):
     PROJECT_BASEDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../")
@@ -135,7 +137,12 @@ class IMPLDriver(object):
             classifier.loadTraining()
         else:
             logging.info("Training the classifier %s", classifier.Name)
+            tm = TimeManager()
             classifier.train(**classifierKwargs)
+            tm.tick()
+            logging.info("Training took %d:%0.2f minutes", int(tm.actual_tick/60), tm.actual_tick%60)
+            logging.info("Computing training error")
+            self._runClassifierOnSet(classifier, "Training", self.FeatureProvider.TrainData, self.FeatureProvider.TrainLabels)
 
         if self.Setup.SaveTraining:
             logging.info("Saving training of classifier %s to file", classifier.Name)

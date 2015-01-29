@@ -7,7 +7,11 @@ from theano.printing import pydotprint as tPngGraph
 from theano.tensor.shared_randomstreams import RandomStreams
 from theano.ifelse import ifelse
 import logging
-import smo as oldSMO
+
+DEBUG = False
+
+def tDebugPrint(msg, val):
+    return tPrint(msg)(val) if DEBUG else val
 
 def toTheanoBool(x):
     return ifelse(T.ge(x.sum(), 1), 1, 0) 
@@ -15,7 +19,10 @@ def toTheanoBool(x):
 def selectRandomJ_(i, m):
     rstr = RandomStreams()
     # TODO: make somehow sure that the random integer is not i
-    return rstr.random_integers(None, 0, m -1, ndim=0)
+    randint = rstr.random_integers(None, 0, m -1, ndim=0)
+#    randint = tPrint("Taking random j: ")(randint)
+    return randint
+    # return T.cast(T.as_tensor_variable(456), 'int64')
 
 def clipAlpha_(aj, H, L):
     aj = ifelse(toTheanoBool(T.gt(aj, H)), H, aj)
@@ -157,18 +164,25 @@ def calcEk(oS, k_):
 def selectJ_(sS, i, Ei):
     # make sure error of i is cached
     sS.eCache = T.set_subtensor(sS.eCache[i,:], [1, Ei])
-
+    
     # code to check error cache list for error with biggest delta to Ei
     validEcacheList = sS.eCache[:,0].nonzero()[0]
-    deltaErrors = theano.scan(lambda k: abs(Ei - calcEk_(sS, k)), sequences=[validEcacheList])[0]
-    selectMaxError = T.max_and_argmax(deltaErrors)
+    
+    aDeltaError = lambda k : abs(Ei - calcEk_(sS, tDebugPrint("k is ", k)))
+    bDeltaError = lambda k : tDebugPrint("delta is ", aDeltaError(k))
+    deltaError = lambda k : ifelse(toTheanoBool(T.eq(i, k)), T.cast(0.0, 'float64'), bDeltaError(k))
+    deltaErrors = theano.scan(deltaError, sequences=[validEcacheList])[0]
+    maxDeltaErrorJ = validEcacheList[T.argmax(deltaErrors)]
+    maxDeltaErrorJAndEj = [calcEk_(sS, maxDeltaErrorJ), maxDeltaErrorJ]
     
     # if we don't have cached errors, yet, we need code to select a random j and Ej
     randomJ = selectRandomJ_(i, sS.m)
     randomJAndError = [calcEk_(sS, randomJ), randomJ]
 
     # either return a j selected by cached errors or random
-    return ifelse(T.gt(validEcacheList.shape[0], 1), selectMaxError, randomJAndError)
+    validECacheListLen = validEcacheList.shape[0]
+    # validECacheListLen = tPrint("The length of valid cahced errors is: ")(validECacheListLen)
+    return ifelse(T.gt(validECacheListLen, 1), maxDeltaErrorJAndEj, randomJAndError)
 
 """
 def selectJ(i_, oS, Ei_):
@@ -195,7 +209,9 @@ def updateEk(oS, k):#after any alpha has changed update the new value in the cac
 def updateEk_(sS, k):#after any alpha has changed update the new value in the cache
     Ek = calcEk_(sS, k)
     # logging.debug("Updating eCache[%s,:] to %s", str(k), str(Ek))
-    T.set_subtensor(sS.eCache[k,:], [1,Ek])
+    k = tDebugPrint("Update error at index: ", k)
+    Ek = tDebugPrint("Updated error to value: ", Ek)
+    sS.eCache = T.set_subtensor(sS.eCache[k,:], [1,Ek])
 
 
 # theano implementation of innerL is split in several functions to support early exit and keep order
@@ -205,24 +221,21 @@ def innerL_(sS, i):
     # use "+" instead of "or" and "*" instead of "and"
     checkUselessAlpha1 = T.ge(sS.labels[i] * Ei, -sS.tol) + T.ge(sS.alphas[i], sS.C)
     checkUselessAlpha2 = T.le(sS.labels[i]*Ei, sS.tol) + T.lt(sS.alphas[i], 0)
+    isUselessAlpha = toTheanoBool(checkUselessAlpha1 * checkUselessAlpha2)
     
     updateL = innerL_alphaInRange_(sS, i, Ei)
     earlyret = sS.retlist(0)
-    return ifelse(toTheanoBool(checkUselessAlpha1 * checkUselessAlpha2), earlyret, updateL)
+    return ifelse(isUselessAlpha, earlyret, updateL)
 
 def innerL_alphaInRange_(sS, i, Ei):
     Ej, j = selectJ_(sS, i, Ei) # both return values are ndarrray, we need to unpack them
-    # Ej = Ej.item(0)
-    # j = j.item(0)
-    # oldJ, oldEj = oldSMO.selectJ(i, oS, Ei)
-    # logging.debug("New Ej: %s, new j: %s; Old Ej: %s, old j: %s", str(Ej), str(j), str(oldEj), str(oldJ))
-    # logging.debug("New Ej type: %s, new j type: %s; Old Ej type: %s, old j type: %s", str(type(Ej)), str(type(j)), str(type(oldEj)), str(type(oldJ)))
+    # j = tPrint("Took j: ")(j)
 
     ijAreEqualClass = toTheanoBool(T.eq(sS.labels[i], sS.labels[j]))
     L = T.maximum(0,    ifelse(ijAreEqualClass,   sS.alphas[j] + sS.alphas[i] - sS.C,    sS.alphas[j] - sS.alphas[i]))
     H = T.minimum(sS.C, ifelse(ijAreEqualClass,   sS.alphas[j] + sS.alphas[i],           sS.C + sS.alphas[j] - sS.alphas[i]))
 
-    eta = 2.0 * sS.K[i,j] - sS.K[i,i] - sS.K[j,j] #changed for kernel
+    eta = 2.0 * sS.K[i,j] - sS.K[i,i] - sS.K[j,j]
     hasBadEtaAndRanges = toTheanoBool(T.eq(L, H) + T.ge(eta, 0))
     
     updateL = innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta)
@@ -237,11 +250,21 @@ def innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta):
 
     # logging.debug("j is %s, Ej is %s, alphas[j] shape: %s, update shape: %s", str(j), str(Ej), str(np.shape(oS.alphas[j])), str(np.shape(update)))
     # update alpha
-    updatedAlpha = sS.alphas[j] - sS.labels[j]*(Ei - Ej)/eta
-    sS.alphas = T.set_subtensor(sS.alphas[j], clipAlpha_(updatedAlpha, H, L))
+    H = tDebugPrint("H= ", H)
+    L = tDebugPrint("L= ", L)
+    Ei = tDebugPrint("Ei= ", Ei)
+    Ej = tDebugPrint("Ej= ", Ej)
+    eta = tDebugPrint("eta= ", eta)
+    
+    updatedAlpha = sS.alphas[j] - (sS.labels[j] * (Ei - Ej) / eta)
+    updatedAlpha = clipAlpha_(updatedAlpha, H, L)
+    j = tDebugPrint("Updating alpha ", j)
+    updatedAlpha = tDebugPrint("Setting alpha to", updatedAlpha)
+    sS.alphas = T.set_subtensor(sS.alphas[j], updatedAlpha)
     updateEk_(sS, j) # add error for alpha[j]
    
     alphaJHasntChanged = toTheanoBool(T.lt(T.abs_(sS.alphas[j] - alphaJold), 0.00001))
+    # alphaJHasntChanged = tPrint("j not moving enough:")(alphaJHasntChanged)
     
     updateL = innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold)
     earlyret = sS.retlist(0)
@@ -263,6 +286,7 @@ def innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold):
     alphaInRange = lambda x : toTheanoBool(T.gt(sS.alphas[x], 0) * T.lt(sS.alphas[x], sS.C))
     checkForB2 = ifelse(alphaInRange(j), b2, (b1 + b2)/2.0 )
     sS.b = ifelse(alphaInRange(j), b1, checkForB2)[0] # 0 index because the values are in form of a one element vector
+    sS.b = tDebugPrint("b= ", sS.b)
     
     return sS.retlist(1)
 
@@ -295,6 +319,11 @@ def innerL(i_, oS):
     
 
 def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Platt SMO
+
+    theano.config.mode = "FAST_RUN"    
+    theano.config.linker = "cvm"
+
+    
     oS = optStruct(dataMatIn,classLabels,C,toler, kTup)
     sS = symbolStruct(oS)
     oSS = operatingSymbolStruct(sS)
@@ -313,16 +342,18 @@ def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Pl
     iteration = 0
     entireSet = True; alphaPairsChanged = 0
     logging.info("Starting main loop")
+    entireSetRange = range(oS.m)
     while iteration < maxIter and (alphaPairsChanged > 0 or entireSet):
         alphaPairsChanged = 0
-        bounds = range(oS.m) if entireSet else nonzero((sS.alphas.get_value() > 0) * (sS.alphas.get_value() < C))[0]
+        bounds = entireSetRange if entireSet else nonzero((sS.alphas.get_value() > 0) * (sS.alphas.get_value() < C))[0]
         setName = "fullSet" if entireSet else "non-bound"
         runI = 0
+        logging.info("This iteration will consist of %d steps", len(bounds))
         for i in bounds:
-            runI += 1
             alphaPairsChanged += compInnerL(i)[0]
-            if runI % 100 == 0:
-                logging.info("%s, iteration: %d i:%d, pairs changed %d" % (setName, iteration,i,alphaPairsChanged))
+            if runI > 0 and runI % 100 == 0:
+                logging.info("%s, iteration: %d i:%d, pairs changed %d" % (setName, iteration, runI, alphaPairsChanged))
+            runI += 1
         
         logging.info("Finished %s, iteration number: %d, pairs changed %d" % (setName, iteration, alphaPairsChanged))
         iteration += 1

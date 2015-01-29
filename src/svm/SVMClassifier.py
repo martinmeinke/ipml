@@ -3,6 +3,7 @@ import logging
 from smo import smoP, kernelTrans
 from numpy import nonzero, shape, multiply, sign
 from Classifier import Classifier
+from Utility import TimeManager
 
 class SVMTraining(object):
     def __init__(self):

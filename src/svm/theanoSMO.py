@@ -2,6 +2,8 @@ from numpy import *
 import numpy as np
 import theano
 import theano.tensor as T
+from theano.printing import Print as tPrint
+from theano.printing import pydotprint as tPngGraph
 from theano.tensor.shared_randomstreams import RandomStreams
 from theano.ifelse import ifelse
 import logging
@@ -97,9 +99,12 @@ class symbolStruct:
     
     def symlist(self):
         return [self.labels, self.C, self.tol, self.K, self.m, self.alphas, self.b, self.eCache]
-    
+      
     def arglist(self, oS):
         return [oS.labelMat, oS.C,   oS.tol,   oS.K,   oS.m,   oS.alphas,   oS.b,   oS.eCache]
+    
+    def retlist(self, *args):
+        return self.symlist() + [T.as_tensor_variable(x) for x in args]
     
     def saveResults(self, oS, results):
         numargs = len(self.arglist(oS))
@@ -193,7 +198,10 @@ def innerL_(sS, i):
     # use "+" instead of "or" and "*" instead of "and"
     checkUselessAlpha1 = T.ge(sS.labels[i] * Ei, -sS.tol) + T.ge(sS.alphas[i], sS.C)
     checkUselessAlpha2 = T.le(sS.labels[i]*Ei, sS.tol) + T.lt(sS.alphas[i], 0)
-    return ifelse(toTheanoBool(checkUselessAlpha1 * checkUselessAlpha2), sS.symlist() + [0], innerL_alphaInRange_(sS, i, Ei))
+    
+    updateL = innerL_alphaInRange_(sS, i, Ei)
+    earlyret = sS.retlist(0)
+    return ifelse(toTheanoBool(checkUselessAlpha1 * checkUselessAlpha2), earlyret, updateL)
 
 def innerL_alphaInRange_(sS, i, Ei):
     Ej, j = selectJ_(sS, i, Ei) # both return values are ndarrray, we need to unpack them
@@ -209,7 +217,12 @@ def innerL_alphaInRange_(sS, i, Ei):
 
     eta = 2.0 * sS.K[i,j] - sS.K[i,i] - sS.K[j,j] #changed for kernel
     hasBadEtaAndRanges = toTheanoBool(T.eq(L, H) + T.ge(eta, 0))
-    return ifelse(hasBadEtaAndRanges, sS.symlist() + [0], innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta))
+    
+    updateL = innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta)
+    earlyret = sS.retlist(0)  
+    #logging.debug("earlyr: type %s, len %s, vals %s", str(type(updateL)), str(len(updateL)), str(updateL))
+    #logging.debug("update: type %s, len %s, vals %s", str(type(earlyret)), str(len(earlyret)), str(earlyret))
+    return ifelse(hasBadEtaAndRanges, earlyret, updateL)
 
 def innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta):
     alphaIold = sS.alphas[i].copy()
@@ -222,7 +235,12 @@ def innerL_updateAlphaWithEta_(sS, i, Ei, j, Ej, H, L, eta):
     updateEk_(sS, j) # add error for alpha[j]
    
     alphaJHasntChanged = toTheanoBool(T.lt(T.abs_(sS.alphas[j] - alphaJold), 0.00001))
-    return ifelse(alphaJHasntChanged, sS.symlist() + [0], innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold))
+    
+    updateL = innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold)
+    earlyret = sS.retlist(0)
+    #logging.debug("earlyr: type %s, len %s, vals %s", str(type(updateL)), str(len(updateL)), str(updateL))
+    #logging.debug("update: type %s, len %s, vals %s", str(type(earlyret)), str(len(earlyret)), str(earlyret))
+    return ifelse(alphaJHasntChanged, earlyret, updateL)
 
 def innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold):
     # update alphas[i] by the same amount as alphas[j]
@@ -239,7 +257,8 @@ def innerL_updateAlphaAndB_(sS, i, Ei, j, Ej, alphaIold, alphaJold):
     checkForB2 = ifelse(alphaInRange(j), b2, (b1 + b2)/2.0 )
     sS.b = ifelse(alphaInRange(j), b1, checkForB2)
     
-    return sS.symlist() + [1]
+    return sS.retlist(1)
+
 # end of theano innerL implementation
 
 
@@ -249,10 +268,16 @@ def innerL(i_, oS):
     i = T.iscalar("i")
     
     innerLUpdate = innerL_(sS, i)
-    symlist = sS.symlist()
-    compInnerL = theano.function(symlist + [i], innerLUpdate, on_unused_input='ignore')
+    # theano.pp(innerLUpdate[0])
+    logging.info("Compiling innerL theano function")
+    insyms = sS.symlist() + [i]
+    logging.debug("insyms to innerL: %s", str(insyms))
+    logging.debug("outsyms of innerLUpdate: %s", str(innerLUpdate))
+    compInnerL = theano.function(insyms, innerLUpdate, on_unused_input='ignore')
+    logging.info("Compilation finished")
     
     args = sS.arglist(oS) + [i]
+    logging.debug("Args to innerL: %s", str(args))
     return sS.saveResults(oS, compInnerL(*args))[0]
     
     

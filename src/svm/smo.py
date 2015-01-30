@@ -37,26 +37,30 @@ class optStruct:
         self.m = shape(dataMatIn)[0]
         self.alphas = mat(zeros((self.m,1)))
         self.b = 0
-        self.eCache = mat(zeros((self.m,2))) #first column is valid flag
+        self.eCache = mat(zeros((self.m,1)))
         self.K = mat(zeros((self.m,self.m)))
         logging.info("Applying kernel transformation to data")
         for i in range(self.m):
             self.K[:,i] = kernelTrans(self.X, self.X[i,:], kTup)
 
+def inBound(oS, x):
+    return oS.alphas[x] > 0 and oS.alphas[x] < oS.C
+
 def calcEk(oS, k):
+    if inBound(oS, k):
+        return oS.eCache[k]
     fXk = float(multiply(oS.alphas,oS.labelMat).T*oS.K[:,k] + oS.b)
     Ek = fXk - float(oS.labelMat[k])
     return Ek
 
 def selectJ(i, oS, Ei):         #this is the second choice -heurstic, and calcs Ej
     maxK = -1; maxDeltaE = 0; Ej = 0
-    oS.eCache[i] = [1,Ei]  #set valid #choose the alpha that gives the maximum delta E
     # logging.debug("%s nonzero values in eCache", str(len(nonzero(oS.eCache[:,0].A)[0])))
-    validEcacheList = nonzero(oS.eCache[:,0].A)[0]
+    validEcacheList = nonzero([0 if inBound(oS, k) else 1 for k in xrange(0, oS.m)])[0]
     if (len(validEcacheList)) > 1:
         for k in validEcacheList:   #loop through valid Ecache values and find the one that maximizes delta E
             if k == i: continue #don't calc for i, waste of time
-            Ek = calcEk(oS, k)
+            Ek = calcEk(oS, k) # gets cached value
             deltaE = abs(Ei - Ek)
             logging.debug("Delta of error %d is %f", k, deltaE)
             if (deltaE > maxDeltaE):
@@ -67,11 +71,6 @@ def selectJ(i, oS, Ei):         #this is the second choice -heurstic, and calcs 
         j = selectJrand(i, oS.m)
         Ej = calcEk(oS, j)
     return j, Ej
-
-def updateEk(oS, k):#after any alpha has changed update the new value in the cache
-    Ek = calcEk(oS, k)
-    logging.debug("Update error %d to %f", k, Ek)
-    oS.eCache[k] = [1,Ek]
 
 def innerL(i, oS):
     Ei = calcEk(oS, i)
@@ -104,21 +103,31 @@ def innerL(i, oS):
     updatedAlpha = clipAlpha(updatedAlpha, H, L)
     logging.debug("Updated alpha %d is %f", j, updatedAlpha)
     oS.alphas[j] = updatedAlpha
-    updateEk(oS, j) #added this for the Ecache
+
     if abs(oS.alphas[j] - alphaJold) < 0.00001:
         logging.debug("j not moving enough")
         return 0
 
     oS.alphas[i] += oS.labelMat[j]*oS.labelMat[i]*(alphaJold - oS.alphas[j])#update i by the same amount as j
-    updateEk(oS, i) #added this for the Ecache                    #the update is in the oppostie direction
-    b1 = oS.b - Ei- oS.labelMat[i]*(oS.alphas[i]-alphaIold)*oS.K[i,i] - oS.labelMat[j]*(oS.alphas[j]-alphaJold)*oS.K[i,j]
-    b2 = oS.b - Ej- oS.labelMat[i]*(oS.alphas[i]-alphaIold)*oS.K[i,j] - oS.labelMat[j]*(oS.alphas[j]-alphaJold)*oS.K[j,j]
+    
+    w1 = - (oS.labelMat[i]*(oS.alphas[i]-alphaIold)).item(0)
+    w2 = - (oS.labelMat[j]*(oS.alphas[j]-alphaJold)).item(0)
+
+    bold = oS.b
+    b1 = oS.b - Ei + w1 * oS.K[i,i] + w2 * oS.K[i,j]
+    b2 = oS.b - Ej + w1 * oS.K[i,j] + w2 * oS.K[j,j]
     if 0 < oS.alphas[i] and oS.C > oS.alphas[i]:
         oS.b = b1
     elif 0 < oS.alphas[j] and oS.C > oS.alphas[j]:
         oS.b = b2
     else:
         oS.b = (b1 + b2)/2.0
+        
+    # TODO: update errors
+    oS.eCache = oS.eCache - w1*oS.K[:,i] - w2*oS.K[:,j] - bold + oS.b
+    oS.eCache[i] = 0.0
+    oS.eCache[j] = 0.0
+        
     logging.debug("b= %f", oS.b)
     return 1
 

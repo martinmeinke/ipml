@@ -1,7 +1,9 @@
+from scipy.weave import inline
+from scipy.weave import converters
 import math
 import random
 import operator
-
+import numpy as np
 
 '''
 function for parallel building of trees
@@ -16,7 +18,6 @@ def parallel_build_tree(args):
     tree = RandomTree(args[0])
     tree.build_tree(args[1], args[2], args[3], args[4])
     return tree
-
 
 class RandomTree(object):
     root_node = None
@@ -38,9 +39,10 @@ class RandomTree(object):
         default_class = self.get_majority_class(data_subset, train_labels)
         actual_depth +=1
         features = list(feature_subset)
+        best_attribute=0
         #Base cases:
         #No more train_data or maximal depth reached, take the majority
-        if len(data_subset) < 2 or (actual_depth > self.f_parms.MAX_TREE_DEPTH and self.f_parms.MAX_TREE_DEPTH is not None):
+        if len(data_subset) < 2 or (actual_depth > self.f_parms.MAX_TREE_DEPTH and self.f_parms.MAX_TREE_DEPTH > 0):
             root = DecisionTreeNode()
             root.set_label(default_class)
             return root
@@ -156,8 +158,8 @@ class RandomTree(object):
         return self.calc_entropy(data_subset, train_labels) \
                - ((len(yes_set) / size) * self.calc_entropy(yes_set, train_labels)) \
                - ((len(no_set) / size) * self.calc_entropy(no_set, train_labels))
-                        
-    def split_data_by_attribute(self, train_data, data_subset, attribute, threshold):
+                    
+    def split_data_by_attribute_(self, train_data, data_subset, attribute, threshold):
         yes_set, no_set = [], []
         for item in data_subset:
             if train_data[item][attribute] > threshold:
@@ -166,7 +168,34 @@ class RandomTree(object):
                 no_set.append(item)
         return [yes_set, no_set]
     
-    def calc_entropy(self, data_subset, train_labels):
+    def split_data_by_attribute(self, train_data, data_subset, attribute, threshold):
+        split = """
+        int i, item;
+        float val;
+        py::list yes, no;
+        py::tuple result(2);
+        for(i=0;i<length;i++){
+             item = int(data_subset[i]);
+             val =  float(train_data[item][attribute]);
+             if(val > threshold)
+             {
+                 yes.append(item);
+             }
+             else{
+                 no.append(item);
+             }
+        }
+        result[0] = yes;
+        result[1] = no;
+        return_val = result;
+        """
+        length=len(data_subset)
+        return inline(split,['length','train_data','data_subset', 'attribute', 'threshold'],type_converters = converters.blitz, extra_compile_args=['-w'],verbose=1)
+    
+    
+    def calc_entropy_(self, data_subset, train_labels):
+        if(len(data_subset) == 0):
+            return 0.0
         frequencies = {}
         ent = 0.0
     
@@ -180,9 +209,38 @@ class RandomTree(object):
         size = float(len(data_subset))
         for freq in frequencies.values():
             p = freq/size
-            ent -= p * math.log(p, 2)
+            ent -= p * np.log(p)
             
         return ent
+    
+    def calc_entropy(self, data_subset, train_labels):
+        entropy = """
+        int i, item_class, item;
+        float p1, p2, ent;
+        float freq[3] = {0.,0.,0.}; 
+        
+        for(i=0;i<length;i++){
+             item = int(data_subset[i]);
+             item_class =  int(train_labels[item][0]) +1;
+             freq[item_class] = freq[item_class] +1;
+        }
+        //p1 = freq[1]/length; //if test
+        p1 = freq[0]/length; //if real
+        p2 = freq[2]/length;
+        if(p1 == 1 || p2 == 1)
+        {
+            return_val = 0.0;
+        }
+        else
+        {
+            return_val = 0.0 - p1*log(p1) - p2*log(p2);
+        }
+        ent = 0.0 - p1*log(p1) - p2*log(p2);
+        """
+        length=len(data_subset)
+        return inline(entropy,['length','data_subset','train_labels'],type_converters = converters.blitz, extra_compile_args=['-w'])
+    
+    
     
     def get_majority_class(self, data_subset, train_labels):
         counts = {}

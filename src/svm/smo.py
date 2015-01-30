@@ -17,6 +17,7 @@ def clipAlpha(aj,H,L):
         aj = L
     return aj
 
+"""
 def kernelTrans(X, A, kernel): #calc the kernel or transform data to a higher dimensional space
     m,n = shape(X)
     K = mat(zeros((m,1)))
@@ -28,6 +29,7 @@ def kernelTrans(X, A, kernel): #calc the kernel or transform data to a higher di
         K = exp(K/(-1*kernel[1]**2)) #divide in NumPy is element-wise not matrix like Matlab
     else: raise NameError('Houston We Have a Problem -- That Kernel is not recognized')
     return K
+"""
 
 class optStruct:
     def __init__(self,dataMatIn, classLabels, C, toler, kTup):  # Initialize the structure with the parameters

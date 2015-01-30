@@ -1,16 +1,19 @@
 import os
 import logging
 import copy
+import itertools
 from LoggingSetup import LoggingSetup
 from FeatureProvider import FeatureProvider
 from DataProvider import DataProvider
 
 from FeatureExtraction.FeatureClass import FeatureExtractor
 # from svm.TheanoSVMClassifier import SVMClassifier
-from svm.SVMClassifier import SVMClassifier
+# from svm.SVMClassifier import SVMClassifier
+from svm.HybridSVMClassifier import SVMClassifier
 from svm.SKLSVMClassifier import SKLSVMClassifier
 from rf.RFClassifier import RFClassifier
 from Utility import TimeManager
+
 
 class IMPLRunConfiguration(object):
     PROJECT_BASEDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../")
@@ -48,6 +51,8 @@ class IMPLRunConfiguration(object):
         self.LoadTraining = False # should we train the classifier or load the training?
         self.SaveTraining = False # save the training data?
         self.TestValidationSet = True # run a test against the validation set?
+        
+        self.Name = ""
 
 
 class IMPLDriver(object):
@@ -164,9 +169,11 @@ def runDriver(*configurations):
     logging.info("Running %d different configuration(s)" % len(configurations))
     i = 0
     for conf in configurations:
+        confname = conf.Name or "config %d" % i
         logging.info("-------------")
-        logging.info("Run config %d", i)
+        logging.info("Runing: %s", confname)
         logging.info("-------------")
+        print confname, ": "
         # log exceptions and throw them again
         try:
             driver.run(conf)
@@ -266,7 +273,7 @@ def main():
     runRFWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
     
     sklVsOwnSVM = copy.copy(runSVMWithAll_1000)
-    sklVsOwnSVM.DataProviderMax = 6000
+    sklVsOwnSVM.DataProviderMax = 3000
     sklVsOwnSVM.SVMArgs = dict(C=10, maxIter=10, kTup=('rbf', 1.5))
     sklVsOwnSVM.RunSVM = True
     sklVsOwnSVM.RunSklSVM = False
@@ -275,18 +282,18 @@ def main():
     loadSVMandValidate.DataProviderMax = 6000
     loadSVMandValidate.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.all.1000.gz")
     loadSVMandValidate.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.all.1000.gz")   
-                 
-    svmArgs = [
-        dict(C=30, maxIter=10, kTup=('rbf', 1.5)),
-    ]
+           
+    
+    params = itertools.product([1, 10, 30, 60, 100, 110, 130, 150, 180], [1.1, 1.3, 1.5, 1.7, 2.0, 2.3, 2.5, 2.7, 3.0])
     trainSVMConfs = []    
-    for args in svmArgs:
-        conf = copy.copy(runSVMWith8000_500)
-        #conf.DataProviderMax = 8000
-        conf.RunSklSVM = True
-        conf.SVMArgs = args
+    for C, sigma in params:
+        conf = copy.copy(runSVMWithAll_1000)
+        conf.DataProviderMax = 8000
+        #conf.RunSklSVM = True
+        conf.SVMArgs = dict(C=C, maxIter=10, kTup=('rbf', sigma))
+        conf.Name = "Run with C=%d and sigma=%0.2f" % (C, sigma)
         trainSVMConfs.append(conf)
-    runDriver(loadSVMandValidate)
+    runDriver(sklVsOwnSVM)
 
 
     

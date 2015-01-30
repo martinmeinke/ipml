@@ -43,7 +43,7 @@ class SVMClassifier(Classifier):
         m,n = shape(dataSet)
         for i in range(m):
             kernelEval = kernelTrans(self.Training.SupportVectors, dataSet[i,:], self.Training.UsedKernel)
-            predict = kernelEval.T * multiply(self.Training.SVLabels, self.Training.Alphas[self.Training.SVIndices]) + self.Training.B
+            predict = kernelEval.T * multiply(self.Training.SVLabels, self.Training.Alphas[self.Training.SVIndices]) - self.Training.B
             if sign(predict) != sign(dataLabels[i]):
                 errorCount += 1
         return float(errorCount) / m

@@ -6,13 +6,13 @@ def selectJrand(i,m):
     while (j==i):
         j = int(random.uniform(0,m))
     logging.info("Taking random j: %d", j)
-    return j
-    # return 456
+    # return j
+    return 456
 
 def clipAlpha(aj,H,L):
     if aj > H:
         aj = H
-    if L > aj:
+    if aj < L:
         aj = L
     return aj
 
@@ -49,27 +49,28 @@ def inBound(oS, x):
 def calcEk(oS, k):
     if inBound(oS, k):
         return oS.eCache[k]
-    fXk = float(multiply(oS.alphas,oS.labelMat).T*oS.K[:,k] + oS.b)
+    fXk = float(multiply(oS.alphas,oS.labelMat).T*oS.K[:,k] -oS.b)
     Ek = fXk - float(oS.labelMat[k])
     return Ek
 
 def selectJ(i, oS, Ei):         #this is the second choice -heurstic, and calcs Ej
     maxK = -1; maxDeltaE = 0; Ej = 0
     # logging.debug("%s nonzero values in eCache", str(len(nonzero(oS.eCache[:,0].A)[0])))
-    validEcacheList = nonzero([0 if inBound(oS, k) else 1 for k in xrange(0, oS.m)])[0]
+    validEcacheList = nonzero([1 if inBound(oS, k) else 0 for k in xrange(0, oS.m)])[0]
     if (len(validEcacheList)) > 1:
         for k in validEcacheList:   #loop through valid Ecache values and find the one that maximizes delta E
             if k == i: continue #don't calc for i, waste of time
             Ek = calcEk(oS, k) # gets cached value
             deltaE = abs(Ei - Ek)
-            logging.debug("Delta of error %d is %f", k, deltaE)
+            # logging.debug("Delta of error %d is %f", k, deltaE)
             if (deltaE > maxDeltaE):
-                logging.debug("Using k=%d because %f > %f", k, deltaE, maxDeltaE)
+                # logging.debug("Using k=%d because %f > %f", k, deltaE, maxDeltaE)
                 maxK = k; maxDeltaE = deltaE; Ej = Ek
         return maxK, Ej
     else:   #in this case (first time around) we don't have any valid eCache values
         j = selectJrand(i, oS.m)
         Ej = calcEk(oS, j)
+        logging.debug("Taking random alpha %d with EJ= %f", j, Ej)
     return j, Ej
 
 def innerL(i, oS):
@@ -99,23 +100,23 @@ def innerL(i, oS):
 
     logging.debug("Ei= %f, Ej= %f, eta= %f", Ei, Ej, eta)
     logging.debug("H= %f, L= %f", H, L)
-    updatedAlpha = oS.alphas[j] - (oS.labelMat[j] * (Ei - Ej) /eta)
+    updatedAlpha = oS.alphas[j] - oS.labelMat[j] * (Ei - Ej) /eta
     updatedAlpha = clipAlpha(updatedAlpha, H, L)
-    logging.debug("Updated alpha %d is %f", j, updatedAlpha)
-    oS.alphas[j] = updatedAlpha
 
-    if abs(oS.alphas[j] - alphaJold) < 0.00001:
+    if abs(updatedAlpha - alphaJold) < 0.00001:
         logging.debug("j not moving enough")
         return 0
 
-    oS.alphas[i] += oS.labelMat[j]*oS.labelMat[i]*(alphaJold - oS.alphas[j])#update i by the same amount as j
+    logging.debug("Updated alpha %d is %f", j, updatedAlpha)
+    oS.alphas[j] = updatedAlpha
+    oS.alphas[i] += oS.labelMat[j]*oS.labelMat[i]*(alphaJold - oS.alphas[j])
     
-    w1 = - (oS.labelMat[i]*(oS.alphas[i]-alphaIold)).item(0)
-    w2 = - (oS.labelMat[j]*(oS.alphas[j]-alphaJold)).item(0)
+    w1 = (oS.labelMat[i]*(oS.alphas[i]-alphaIold)).item(0)
+    w2 = (oS.labelMat[j]*(oS.alphas[j]-alphaJold)).item(0)
 
     bold = oS.b
-    b1 = oS.b - Ei + w1 * oS.K[i,i] + w2 * oS.K[i,j]
-    b2 = oS.b - Ej + w1 * oS.K[i,j] + w2 * oS.K[j,j]
+    b1 = oS.b + Ei + w1 * oS.K[i,i] + w2 * oS.K[i,j]
+    b2 = oS.b + Ej + w1 * oS.K[i,j] + w2 * oS.K[j,j]
     if 0 < oS.alphas[i] and oS.C > oS.alphas[i]:
         oS.b = b1
     elif 0 < oS.alphas[j] and oS.C > oS.alphas[j]:
@@ -124,7 +125,7 @@ def innerL(i, oS):
         oS.b = (b1 + b2)/2.0
         
     # TODO: update errors
-    oS.eCache = oS.eCache - w1*oS.K[:,i] - w2*oS.K[:,j] - bold + oS.b
+    oS.eCache = oS.eCache + w1*oS.K[:,i] + w2*oS.K[:,j] + bold - oS.b
     oS.eCache[i] = 0.0
     oS.eCache[j] = 0.0
         

@@ -1,5 +1,6 @@
 from numpy import *
 import logging
+from theanoSMO import fkKernelTrans
 
 def selectJrand(i,m):
     j=i #we want to select any J not equal to i
@@ -38,10 +39,13 @@ class optStruct:
         self.alphas = mat(zeros((self.m,1)))
         self.b = 0
         self.eCache = mat(zeros((self.m,2))) #first column is valid flag
-        self.K = mat(zeros((self.m,self.m)))
-        logging.info("Applying kernel transformation to data")
-        for i in range(self.m):
-            self.K[:,i] = kernelTrans(self.X, self.X[i,:], kTup)
+        
+        # Use theano implementation for this
+        self.K = mat(fkKernelTrans(self.X, kTup))
+        #self.K = mat(zeros((self.m,self.m)))
+        #logging.info("Applying kernel transformation to data")
+        #for i in range(self.m):
+        #    self.K[:,i] = kernelTrans(self.X, self.X[i,:], kTup)
 
 def calcEk(oS, k):
     fXk = float(multiply(oS.alphas,oS.labelMat).T*oS.K[:,k] + oS.b)

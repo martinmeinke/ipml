@@ -125,14 +125,14 @@ class symbolStruct:
 
 class optStruct:
     def __init__(self,dataMatIn, classLabels, C, toler, kTup):  # Initialize the structure with the parameters
-        self.X = dataMatIn
-        self.labelMat = classLabels
+        self.X = np.asarray(dataMatIn, dtype=theano.config.floatX)
+        self.labelMat = np.asarray(classLabels, dtype=theano.config.floatX)
         self.C = C
         self.tol = toler
         self.m = shape(dataMatIn)[0]
-        self.alphas = np.mat(zeros((self.m,1)))
+        self.alphas = np.mat(zeros((self.m,1), dtype=theano.config.floatX))
         self.b = 0.0
-        self.eCache = np.mat(zeros((self.m,2))) #first column is valid flag
+        self.eCache = np.mat(zeros((self.m,2), dtype=theano.config.floatX)) #first column is valid flag
 
         self.K = mat(fkKernelTrans(self.X, kTup))
         logging.info("K shape: %s", str(self.K.shape))
@@ -228,8 +228,8 @@ def innerL_(sS, i):
     return ifelse(isUselessAlpha, earlyret, updateL)
 
 def innerL_alphaInRange_(sS, i, Ei):
-    Ej, j = selectJ_(sS, i, Ei) # both return values are ndarrray, we need to unpack them
-    # j = tPrint("Took j: ")(j)
+    
+    Ej, j = selectJ_(sS, i, Ei)
 
     ijAreEqualClass = toTheanoBool(T.eq(sS.labels[i], sS.labels[j]))
     L = T.maximum(0,    ifelse(ijAreEqualClass,   sS.alphas[j] + sS.alphas[i] - sS.C,    sS.alphas[j] - sS.alphas[i]))

@@ -6,8 +6,8 @@ from FeatureProvider import FeatureProvider
 from DataProvider import DataProvider
 
 from FeatureExtraction.FeatureClass import FeatureExtractor
-from svm.TheanoSVMClassifier import SVMClassifier
-# from svm.SVMClassifier import SVMClassifier
+# from svm.TheanoSVMClassifier import SVMClassifier
+from svm.SVMClassifier import SVMClassifier
 from svm.SKLSVMClassifier import SKLSVMClassifier
 from rf.RFClassifier import RFClassifier
 from Utility import TimeManager
@@ -266,13 +266,16 @@ def main():
     runRFWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
     
     sklVsOwnSVM = copy.copy(runSVMWithAll_1000)
-    sklVsOwnSVM.DataProviderMax = 3000
+    sklVsOwnSVM.DataProviderMax = 6000
     sklVsOwnSVM.SVMArgs = dict(C=10, maxIter=10, kTup=('rbf', 1.5))
     sklVsOwnSVM.RunSVM = True
     sklVsOwnSVM.RunSklSVM = False
     sklVsOwnSVM.SklSVMArgs = dict(C=10, gamma=0.0001)
     
-                               
+    loadSVMandValidate.DataProviderMax = 6000
+    loadSVMandValidate.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.all.1000.gz")
+    loadSVMandValidate.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.all.1000.gz")   
+                 
     svmArgs = [
         dict(C=30, maxIter=10, kTup=('rbf', 1.5)),
     ]
@@ -283,7 +286,7 @@ def main():
         conf.RunSklSVM = True
         conf.SVMArgs = args
         trainSVMConfs.append(conf)
-    runDriver(sklVsOwnSVM)
+    runDriver(loadSVMandValidate)
 
 
     

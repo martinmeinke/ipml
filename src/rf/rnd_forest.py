@@ -1,11 +1,14 @@
 import operator
 import random
+import numpy
 from numpy import shape
 from math import sqrt
 from rnd_tree import RandomTree, parallel_build_tree
 from multiprocessing import Pool
 import multiprocessing
 import logging
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import RFE, SelectKBest, chi2, f_classif
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +61,29 @@ class RandomForest(object):
     f_parms = None 
     num_data = None
     num_features = None
+    used_features = []
+    kbest_features = None
     
     def __init__(self, training_features, training_labels, params):
         self.num_data, self.num_features = shape(training_features)
         self.f_parms = params
-        self.train_data = training_features
-        self.train_labels = training_labels        
+        #self.select_features(training_features, training_labels)
+        self.train_data = training_features.tolist()
+        self.train_labels = training_labels.tolist()
         self.forest = []
+    
+    def select_features(self, X, y):
+        estimator = SelectKBest(chi2, 700)
+        estimator.fit(X, y.A1)
+        support_mask = estimator._get_support_mask()
+        features = []
+        i = 0
+        for feature in support_mask:
+            if(feature):
+                features.append(i)
+            i +=1
+        self.kbest_features = features
+        self.num_features = len(features)
     
     def prepare_forest(self):
         for __ in xrange(self.f_parms.FOREST_SIZE):
@@ -84,9 +103,9 @@ class RandomForest(object):
         counts = {}
         for tree in self.forest:
             decision = tree.decide(feature)
-            if counts.has_key(decision):
+            try:
                 counts[decision] += 1
-            else:
+            except:
                 counts[decision] = 1
         sortedCounts = sorted(counts.items(), key=operator.itemgetter(1), reverse=True)
         return sortedCounts[0][0]
@@ -98,7 +117,7 @@ class RandomForest(object):
         self.prepare_forest()
         for tree in self.forest:
             data_subset = self.gen_subset_exclusive(self.num_data, self.f_parms.SAMPLE_SUBSET_SIZE)
-            attributes = self.gen_subset_exclusive(self.num_features, self.f_parms.NUM_ATTRIBUTES)         
+            attributes = self.gen_feature_set(self.num_features, self.f_parms.NUM_ATTRIBUTES)         
             tree.build_tree(self.train_data, self.train_labels, data_subset, attributes)
             i+=1
             logger.info("Forest size: " + str(i))
@@ -112,7 +131,7 @@ class RandomForest(object):
         
         for __ in xrange(self.f_parms.FOREST_SIZE):
             data_subset = self.gen_subset_exclusive(self.num_data, self.f_parms.SAMPLE_SUBSET_SIZE)
-            attributes = self.gen_subset_exclusive(self.num_features, self.f_parms.NUM_ATTRIBUTES)  
+            attributes = self.gen_feature_set(self.num_features, self.f_parms.NUM_ATTRIBUTES)
             args.append((self.f_parms, self.train_data, self.train_labels, data_subset, attributes))
                             
         self.forest = pool.map(parallel_build_tree, args)
@@ -128,14 +147,40 @@ class RandomForest(object):
         return subset
     
     # generate subset without putting back
-    def gen_subset_exclusive(self, size, sub_size):
+    def gen_subset_exclusive(self, size, sub_size, feature_exclusive=False):
         subset = []
-        orig_list = [j for j in xrange(size)]
+        orig_list=[]
+        for i in xrange(size):
+            if(feature_exclusive):
+                if i not in self.used_features:
+                    orig_list.append(i)
+            else:
+                orig_list.append(i)
+        if(len(orig_list) < sub_size):
+            orig_list = [j for j in xrange(size)]
         random.shuffle(orig_list)
+        
         for _ in xrange(sub_size):
             sample_idx = orig_list.pop()
+            if(feature_exclusive):
+                self.used_features.append(sample_idx)
             subset.append(sample_idx)
         return subset
+    
+    def gen_feature_set(self, size, sub_size):
+        
+        if(self.kbest_features is None):
+            return self.gen_subset_exclusive(size, sub_size, True)
+        else:
+            subset = []
+            orig_list = list(self.kbest_features)
+            random.shuffle(orig_list)
+            for _ in xrange(sub_size):
+                sample_idx = orig_list.pop()
+                subset.append(sample_idx)
+            return subset
+            
+        
 
 
         

@@ -12,15 +12,19 @@ args[1] is the whole train_data
 args[2] are the whole train_labels
 args[3] is the data_subset for the tree
 args[4] are the attributes
+args[5] is the oob_subset (out of bag) for the tree
+
 '''
 
 def parallel_build_tree(args):
     tree = RandomTree(args[0])
-    tree.build_tree(args[1], args[2], args[3], args[4])
+    tree.build_tree(args[1], args[2], args[3], args[4], args[5])
     return tree
 
 class RandomTree(object):
     root_node = None
+    var_importance = None
+    used_features = None
     
     def __init__(self, f_parms):
         self.f_parms = f_parms
@@ -28,14 +32,25 @@ class RandomTree(object):
     '''
     wrapper to build the tree and set the root node
     '''
-    def build_tree(self, data, labels, data_subset, attribute_subset):
+    def build_tree(self, data, labels, data_subset, attribute_subset, oob=None):
         actual_depth = 0
-        self.root_node = self.generate_tree(data, labels, data_subset, attribute_subset, actual_depth)
+        self.root_node = self.generate_tree(data, labels, data_subset, oob, attribute_subset, actual_depth)
+        if(oob is not None):
+            __ , num_features = np.shape(data)
+            #set initial variable importance to zero
+            var_importance = np.zeros(num_features)
+            used = np.ones(num_features)
+            #set the variable importance for the used variables in the tree
+            self.root_node.calc_variable_importance(var_importance, used)
+            self.var_importance = var_importance
+            self.used_features = used
+        
         
     '''
     generates a rondomized decision tree
     '''
-    def generate_tree(self, train_data, train_labels, data_subset, feature_subset, actual_depth):
+    def generate_tree(self, train_data, train_labels, data_subset, oob, feature_subset, actual_depth):
+        
         default_class = self.get_majority_class(data_subset, train_labels)
         actual_depth +=1
         features = list(feature_subset)
@@ -46,7 +61,7 @@ class RandomTree(object):
             root = DecisionTreeNode()
             root.set_label(default_class)
             return root
-    
+        
         #All train_data points have same label
         first_class = train_labels[data_subset[0]][0]
         sameValues = True
@@ -97,10 +112,12 @@ class RandomTree(object):
             root.set_label(default_class)
             return root
         root = DecisionTreeNode(best_attribute, best_threshold)
-        l_child = self.generate_tree(train_data, train_labels, yes_set, feature_subset, actual_depth)
-        r_child = self.generate_tree(train_data, train_labels, no_set, feature_subset, actual_depth)
+        l_child = self.generate_tree(train_data, train_labels, yes_set, oob, feature_subset, actual_depth)
+        r_child = self.generate_tree(train_data, train_labels, no_set, oob, feature_subset, actual_depth)
         root.set_l_child(l_child)
         root.set_r_child(r_child)
+        if(oob is not None and root.decision_node is not None):
+            root.set_gini_importance(self.calc_gini_gain(train_data, train_labels, data_subset, best_attribute, best_threshold))
         return root
     
     def decide(self, features):
@@ -262,6 +279,20 @@ class DecisionTreeNode:
         self.right_child = None
         self.label = None
         self.decision_node = False
+        self.gini = None
+        
+    def set_gini_importance(self, gini_importance):
+        self.gini = gini_importance
+        
+    def calc_variable_importance(self, features, used):
+        if(self.decision_node):
+            return 
+        #only increase used features if already used
+        if(features[self.feature_index] > 0):
+            used[self.feature_index] = used[self.feature_index] +1
+        features[self.feature_index] = features[self.feature_index] + self.gini
+        self.right_child.calc_variable_importance(features, used)
+        self.left_child.calc_variable_importance(features, used)
 
     def set_l_child(self, child_node):
         self.left_child = child_node

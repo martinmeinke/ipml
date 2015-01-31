@@ -1,6 +1,6 @@
 import operator
 import random
-import numpy
+import numpy as np
 from numpy import shape
 from math import sqrt
 from rnd_tree import RandomTree, parallel_build_tree
@@ -64,6 +64,7 @@ class RandomForest(object):
     used_features = []
     kbest_features = None
     
+    
     def __init__(self, training_features, training_labels, params):
         self.num_data, self.num_features = shape(training_features)
         self.f_parms = params
@@ -72,6 +73,8 @@ class RandomForest(object):
         self.train_labels = training_labels.tolist()
         self.forest = []
     
+    
+    #TODO:remove because is sklearn implementation 
     def select_features(self, X, y):
         estimator = SelectKBest(chi2, 700)
         estimator.fit(X, y.A1)
@@ -84,7 +87,31 @@ class RandomForest(object):
             i +=1
         self.kbest_features = features
         self.num_features = len(features)
-    
+        
+    #generate random forest and calculate variable importance and return the K best ones
+    def get_k_best_variables(self, k):
+        msg = 'calculate important features with random forest classifier'
+        print msg
+        logger.info(msg)
+        self.parallel_generate_forest(True)
+        var_imp = self.forest[0].var_importance
+        used_var = self.forest[0].used_features
+        for i in xrange(1, self.f_parms.FOREST_SIZE):
+            var_imp = np.add(var_imp, self.forest[i].var_importance)
+            used_var = np.add(used_var, self.forest[i].used_features)
+        var_imp = np.divide(var_imp, used_var)
+        #sort variables respecting importance
+        var_sorted = [i[0] for i in sorted(enumerate(var_imp.tolist()), key=lambda x:x[1], reverse=True)]
+        if(k > len(var_sorted) and k < 0):
+            msg = "Error: k =" + str(k) + " but only " +str(len(var_sorted)) + " are available"
+            logger.log(1, msg)
+            return
+        return var_sorted[:k]
+        
+    def set_kbest(self, kbest):
+        self.kbest_features = kbest
+        self.num_features = len(kbest)
+        
     def prepare_forest(self):
         for __ in xrange(self.f_parms.FOREST_SIZE):
             self.forest.append(RandomTree(self.f_parms))
@@ -111,28 +138,34 @@ class RandomForest(object):
         return sortedCounts[0][0]
 
 
-    def generate_forest(self):
+    def generate_forest(self, oob=False):
         print "generate forest"
         i=0
         self.prepare_forest()
         for tree in self.forest:
-            data_subset = self.gen_subset_exclusive(self.num_data, self.f_parms.SAMPLE_SUBSET_SIZE)
-            attributes = self.gen_feature_set(self.num_features, self.f_parms.NUM_ATTRIBUTES)         
-            tree.build_tree(self.train_data, self.train_labels, data_subset, attributes)
+            data_subset, oob = self.gen_subset_exclusive(self.num_data, self.f_parms.SAMPLE_SUBSET_SIZE)
+            attributes = self.gen_feature_set(self.num_features, self.f_parms.NUM_ATTRIBUTES)[0]  
+            if(oob):       
+                tree.build_tree(self.train_data, self.train_labels, data_subset, attributes, oob)
+            else:
+                tree.build_tree(self.train_data, self.train_labels, data_subset, attributes)
             i+=1
             logger.info("Forest size: " + str(i))
                             
     
-    def parallel_generate_forest(self):
+    def parallel_generate_forest(self, oob = False):
         print "generate forest"
         cores = multiprocessing.cpu_count()
         pool = Pool(processes=cores)
         args = []
         
         for __ in xrange(self.f_parms.FOREST_SIZE):
-            data_subset = self.gen_subset_exclusive(self.num_data, self.f_parms.SAMPLE_SUBSET_SIZE)
-            attributes = self.gen_feature_set(self.num_features, self.f_parms.NUM_ATTRIBUTES)
-            args.append((self.f_parms, self.train_data, self.train_labels, data_subset, attributes))
+            data_subset, oob = self.gen_subset_exclusive(self.num_data, self.f_parms.SAMPLE_SUBSET_SIZE)
+            attributes = self.gen_feature_set(self.num_features, self.f_parms.NUM_ATTRIBUTES)[0]
+            if(oob):
+                args.append((self.f_parms, self.train_data, self.train_labels, data_subset, attributes, oob))
+            else:
+                args.append((self.f_parms, self.train_data, self.train_labels, data_subset, attributes))
                             
         self.forest = pool.map(parallel_build_tree, args)
         pool.close()
@@ -165,7 +198,7 @@ class RandomForest(object):
             if(feature_exclusive):
                 self.used_features.append(sample_idx)
             subset.append(sample_idx)
-        return subset
+        return (subset, orig_list)
     
     def gen_feature_set(self, size, sub_size):
         
@@ -178,7 +211,7 @@ class RandomForest(object):
             for _ in xrange(sub_size):
                 sample_idx = orig_list.pop()
                 subset.append(sample_idx)
-            return subset
+            return (subset, orig_list)
             
         
 

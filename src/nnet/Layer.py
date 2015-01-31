@@ -17,6 +17,7 @@ class Layer(object):
     outputshape = None
     params = None
     regularized_params = []
+    regularized_params_weights = []
 
     def __init__(self, params):
         '''

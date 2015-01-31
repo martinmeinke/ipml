@@ -48,7 +48,10 @@ class SubsamplingLayer(Layer):
     def build(self):
         # the bias is a 1D tensor -- one bias per output feature map
         # TODO: init biases with one, when using relu?
-        b_values = numpy.zeros((self.previous.num_output_featuremaps,), dtype=theano.config.floatX) # @UndefinedVariable
+        if self.activation == 1:
+            b_values = numpy.zeros((self.previous.num_output_featuremaps,), dtype=theano.config.floatX) # @UndefinedVariable
+        else:
+            b_values = numpy.zeros((self.previous.num_output_featuremaps,), dtype=theano.config.floatX) # @UndefinedVariable
         self.b = theano.shared(value=b_values, borrow=False)
 
         # downsample each feature map individually, using maxpooling
@@ -88,4 +91,5 @@ class SubsamplingLayer(Layer):
         self.params = [self.b]
 
     def restore_params(self):
-        self.b.container.data = self.params[0].container.data
+        self.b.set_value(self.params[0].container.data)
+        #self.b.container.data = self.params[0].container.data

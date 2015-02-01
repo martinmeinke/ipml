@@ -19,10 +19,9 @@ from imageio import helpers
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "128_v1_large"
+MODEL_NAME = "deep_128_medium"
 # 0 = train, 1 = kaggle eval
 RUN_MODE = 0
-# DATASET = "../../data/train_images_128_100percent"
 
 
 def readParams(f):
@@ -46,6 +45,9 @@ class Test(unittest.TestCase):
     C1 = MP["C1"]
     C2 = MP["C2"]
     C3 = MP["C3"]
+    C4 = MP["C4"]
+    #C5 = MP["C5"]
+    
     POOL1 = MP["POOL1"]
     POOL2 = MP["POOL2"]
     POOL3 = MP["POOL3"]
@@ -66,6 +68,9 @@ class Test(unittest.TestCase):
     C1REGWEIGHT = MP["C1REGWEIGHT"]
     C2REGWEIGHT = MP["C2REGWEIGHT"]
     C3REGWEIGHT = MP["C3REGWEIGHT"]
+    C4REGWEIGHT = MP["C4REGWEIGHT"]
+    # C5REGWEIGHT = MP["C5REGWEIGHT"]
+    
     H1REGWEIGHT = MP["H1REGWEIGHT"]
     H2REGWEIGHT = MP["H2REGWEIGHT"]
 
@@ -104,9 +109,16 @@ class Test(unittest.TestCase):
         self.network.add_layer(ConvLayer(self.network.rng, self.C1, input_size, self.trainer.batch_size, regularizer_weight=self.C1REGWEIGHT))
         self.network.add_layer(SubsamplingLayer(self.network.rng, self.POOL1, activation=self.POOL1ACTIVATION))
         self.network.add_layer(ConvLayer(self.network.rng, self.C2, batch_size=self.trainer.batch_size, regularizer_weight=self.C2REGWEIGHT))
-        self.network.add_layer(SubsamplingLayer(self.network.rng, self.POOL2, activation=self.POOL2ACTIVATION))
         self.network.add_layer(ConvLayer(self.network.rng, self.C3, batch_size=self.trainer.batch_size, regularizer_weight=self.C3REGWEIGHT))
+        self.network.add_layer(SubsamplingLayer(self.network.rng, self.POOL2, activation=self.POOL2ACTIVATION))
+        self.network.add_layer(ConvLayer(self.network.rng, self.C4, batch_size=self.trainer.batch_size, regularizer_weight=self.C4REGWEIGHT))
         self.network.add_layer(SubsamplingLayer(self.network.rng, self.POOL3, activation=self.POOL3ACTIVATION))
+
+        #self.network.add_layer(ConvLayer(self.network.rng, self.C4, batch_size=self.trainer.batch_size, regularizer_weight=self.C4REGWEIGHT))
+        #self.network.add_layer(SubsamplingLayer(self.network.rng, self.POOL2, activation=self.POOL2ACTIVATION))
+        #self.network.add_layer(ConvLayer(self.network.rng, self.C5, batch_size=self.trainer.batch_size, regularizer_weight=self.C5REGWEIGHT))
+        # self.network.add_layer(SubsamplingLayer(self.network.rng, self.POOL3, activation=self.POOL3ACTIVATION))
+        
         self.network.add_layer(HiddenLayer(self.network.rng, self.H1OUT, activation=self.H1ACTIVATION, regularizer_weight=self.H1REGWEIGHT))
         self.network.add_layer(HiddenLayer(self.network.rng, self.H2OUT, activation=self.H2ACTIVATION, regularizer_weight=self.H2REGWEIGHT))
         self.network.add_layer(SoftMax(self.network.rng, 2, self.L1, self.L2, regularizer_weight=1))

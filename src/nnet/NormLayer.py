@@ -24,13 +24,6 @@ class NormLayer(Layer):
         LCN: local contrast normalization
             kwargs: 
                 kernel_size=9, threshold=1e-4, use_divisor=True
-        GCN: global contrast normalization
-            kwargs:
-                scale=1., subtract_mean=True, use_std=False, sqrt_bias=0., 
-                min_divisor=1e-8
-        MEAN: local mean subtraction
-            kwargs:
-                kernel_size=5
         """
 
         self.input = input;
@@ -39,7 +32,7 @@ class NormLayer(Layer):
         self.params = []
 
 
-    def lecun_lcn(self, X, kernel_size=7, threshold=1e-4, use_divisor=False):
+    def lecun_lcn(self, X, kernel_size=3, threshold=1e-3, use_divisor=True):
         """
         Yann LeCun's local contrast normalization
         Orginal code in Theano by: Guillaume Desjardins

@@ -9,6 +9,7 @@ import theano
 import theano.tensor as T
 from nnet.Layer import Layer
 from nnet.SubsamplingLayer import SubsamplingLayer
+from nnet.ConvLayer import ConvLayer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ class HiddenLayer(Layer):
         # convert input into a flat representation
         # (no more depth in feature maps, or 2d images - just a
         # 1 d layer of regular neurons
-        if isinstance(self.previous, SubsamplingLayer):
+        if isinstance(self.previous, SubsamplingLayer) or isinstance(self.previous, ConvLayer):
             self.input = self.input.flatten(2)
 
         lin_output = T.dot(self.input, self.W) + self.b

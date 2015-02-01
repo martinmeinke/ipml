@@ -8,6 +8,7 @@ import numpy
 import theano
 import theano.tensor as T
 from nnet.Layer import Layer
+from nnet.ConvLayer import ConvLayer
 import logging
 
 logger = logging.getLogger(__name__)

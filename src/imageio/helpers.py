@@ -13,9 +13,15 @@ from math import ceil, sqrt, log
 import sys
 from select import select
 import itertools
+import time
 import re
 import gc
 from nnet import ConvLayer
+from nnet.SubsamplingLayer import SubsamplingLayer
+from nnet.NormLayer import NormLayer
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def plot_qimage_grayscale(image, title=''):
@@ -77,13 +83,30 @@ def plot_misclassified_images(misclassified_images, test_set, max_images=36, edg
     plt.figure(1)
 
 
+def plot_layer_output(layer_outputs):
+    logger.info("Plotting {} layers".format(len(layer_outputs)))
+    
+    for lo, loid in zip(layer_outputs, range(len(layer_outputs))):
+        logger.info("Layer output shape: {}".format(lo.shape))
+        num_filters = lo.shape[1]
+        img = lo[1]
+        
+        plt.figure(100 + loid)
+
+        edge_len = ceil(sqrt(num_filters))
+        for filter in range(num_filters):
+            plt.subplot(edge_len, edge_len, filter)
+            plt.imshow(img[filter], cmap=plt.get_cmap("gray"), vmin = -0.5, vmax = 0.5)
+    plt.figure(1)
+
+
 def plot_kernels(layers, model_name):
     layerids = []
     for l, i in zip(layers, range(len(layers))):
         if isinstance(l, ConvLayer):
             layerids.append(i)
     
-    figids = range(2, 2+len(layerids)+1)
+    figids = range(2, 2 + len(layerids) + 1)
     
     for layer, figid in zip(layerids, figids):
         plt.figure(figid)
@@ -348,15 +371,15 @@ def lr_decay(lrl, lrt0, decrease_factor, t):
     """models the learning rate decay over time t"""
     return lrl / (lrt0 + (log(t * decrease_factor + 2))) - 0.008
 
-def lr_decay2(lrl, t):
+def lr_decay2(lrl, t, rate = 0.988):
     """models the learning rate decay over time t"""
-    return lrl * (0.98 ** t)
+    return lrl * (rate ** t)
 
 
 def plot_lr_decay():
     t = numpy.arange(0, 200, 1)
 
-    ranges = [[0.008],
+    ranges = [[0.025],
               [0.5]]
 
     for lrl, decfac in list(itertools.product(*ranges)):

@@ -143,6 +143,7 @@ class IMPLDriver(object):
             
         if self.Setup.TestValidationSet:
             logging.info("Testing the validation set with classifier %s", classifier.Name)
+            self._runClassifierOnSet(classifier, "Train", self.FeatureProvider.TrainData, self.FeatureProvider.TrainLabels)
             self._runClassifierOnSet(classifier, "Validation", self.FeatureProvider.ValidationData, self.FeatureProvider.ValidationLabels)
             self._runClassifierOnSet(classifier, "Test", self.FeatureProvider.TestData, self.FeatureProvider.TestLabels)
 
@@ -257,6 +258,14 @@ def main():
     runRFWith8000_500.ExtractFeatures = False
     runRFWith8000_500.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.500.gz")
     runRFWith8000_500.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.500.gz")
+
+    runRFWithAll_1000 = IMPLRunConfiguration()
+    runRFWithAll_1000.RunRF = True
+    runRFWithAll_1000.SaveTraining = True
+    runRFWithAll_1000.CreateDataSetPartitioning = False
+    runRFWithAll_1000.ExtractFeatures = False
+    runRFWithAll_1000.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.all.1000.gz")
+    runRFWithAll_1000.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.all.1000.gz")
     
     sklVsOwnSVM = copy.copy(runSVMWithAll_1000)
     sklVsOwnSVM.SVMArgs = dict(C=30, maxIter=10, kTup=('rbf', 1.5))
@@ -275,7 +284,38 @@ def main():
         conf.RunSklSVM = True
         conf.SVMArgs = args
         trainSVMConfs.append(conf)
-    runDriver(sklVsOwnSVM)
+    
+        rfArgs=[]
+    #rfArgs.append(dict(num_attr=32, max_tries=16, subset=int(5000*2/3*0.7), min_gain=-1, thres_steps=30, forest_size=10, max_depth=12))
+    #rfArgs.append(dict(num_attr=23, max_tries=23, subset=int(8000*2/3), min_gain=-1, thres_steps=30, forest_size=3, max_depth=11))
+    #rfArgs.append(dict(num_attr=23, max_tries=11, subset=int(2000*0.7*2/3), min_gain=-1, thres_steps=30, forest_size=500, max_depth=7))
+    rfArgs.append(dict(num_attr=32, max_tries=16, subset=int(1000*0.7*2/3), min_gain=-1, thres_steps=30, forest_size=100, max_depth=10, select_kbest=True))
+    
+    '''attrs = [32]#[32, 64, 125, 250, 500, 1000]
+    tries = [16, 32]#[8, 16, 32]
+    subsets = [466, 700] #[466, 530, 700]
+    gains = [-1]#[-1, 0.01, 0.005, 0.001, 0.0005]
+    steps = [15,30,45]#[15, 30]
+    sizes = [200, 500]#[100, 300, 500]
+    depths = [8,9,10,11,12]#[-1, 8, 10, 12, 20]
+    for a in attrs:
+        for t in tries:
+            for sub in subsets:
+                for g in gains:
+                    for st in steps:
+                        for si in sizes:
+                            for d in depths:
+                                rfArgs.append(dict(num_attr=a, max_tries=t, subset=sub, min_gain=g, thres_steps=st, forest_size=si, max_depth=d))'''
+    
+    
+    trainRFConfs = []    
+    for args in rfArgs:
+        conf = copy.copy(runRFWithAll_1000)
+        conf.DataProviderMax = 1000
+        conf.RFArgs = args
+        trainRFConfs.append(conf)
+    runDriver(*trainRFConfs)
+
 
 
     

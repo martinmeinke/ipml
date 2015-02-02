@@ -14,6 +14,47 @@ import Features
 import Vectors
 from Utility import TimeManager
 
+import CPP_Functions
+#import Side_Functions
+
+global_feature_images = []
+global_labels = []
+
+def compute_distance(texel_feature):
+       
+    d_dog = 0
+    d_cat = 0
+    n_dog = 0
+    n_cat = 0
+    
+    diff = 0;
+    n_feats = len(texel_feature)
+    n_pics = len(global_feature_images)
+    
+    #print 'Hello'
+    
+    for j in xrange(0,n_pics):
+        
+        img = Image.open(global_feature_images[j])
+        data = np.asarray(img, np.float32)
+        
+        #print global_labels[j]
+        
+        if (global_labels[j] == 1):
+            d_dog = d_dog + CPP_Functions.cpp_pic_dist(data, texel_feature)
+            n_dog = n_dog +1
+        if (global_labels[j] == -1):
+            d_cat = d_cat + CPP_Functions.cpp_pic_dist(data, texel_feature)
+            n_cat = n_cat +1
+            
+    d_dog = d_dog / n_dog
+    d_cat = d_cat / n_cat
+    diff = abs(d_dog - d_cat)
+    
+    #print 'Hello'
+    
+    return diff
+
 def compute_features(path, features):
     img = Image.open(path)
     data = np.asarray(img, np.float32)
@@ -58,12 +99,14 @@ class FeatureExtractor(object):
         self.maxTexelPics = max_texel_pics or self.MAX_TEXEL_PICS
         
         self.mytimer = TimeManager(logging.getLogger())
+        
+        self.stats = []
 
     def loadState(self, state):
         self.texel_features, self.feature_border, self.distance_threshold, self.num_features, self.maxTexelPics = state
 
 
-    def initialize(self, trainset):
+    def initialize(self, trainset, labels):
 
         logging.info('INTEGRATING IMAGES IN TEXEL FEATURE LIST')
 
@@ -72,6 +115,13 @@ class FeatureExtractor(object):
         #       This approach would take longer but would fit into main memory. We could even implement a buffer of ~2000 images
         #       to speed that method up
         trainset = trainset if len(trainset) < self.maxTexelPics else trainset[:self.maxTexelPics]
+        labels = labels
+        
+        global global_feature_images
+        global global_labels
+            
+        global_feature_images = trainset
+        global_labels = labels
         
         logging.info('cutting images')
         # Workaround: Python seems to keep internal "free lists" of float values. Extracting the texels
@@ -87,6 +137,11 @@ class FeatureExtractor(object):
         p.join()
         self.mytimer.tick()
         
+        #logging.info("Creating statistics")
+        
+        
+        
+        
         logging.info('INTEGRATION DONE')
 
     def display_data(self):
@@ -98,37 +153,109 @@ class FeatureExtractor(object):
 
         logging.info('DISPLAYING DONE')
 
-    def extract(self, trainset):
+    def extract(self, trainset, labels):
 
-        n = len(trainset)
-        logging.info("COMPUTING %d VECTORS", n)
-
-        nCores = mp.cpu_count()
-        pool = mp.Pool(nCores)
-        asyncres = []
-        for i in xrange(0, n):
-            asyncres.append(pool.apply_async(compute_features, [trainset[i], self.texel_features]))
-
-        results = []
-        workingTimer = TimeManager()
-        i = 0
-        for r in asyncres:
-            results.append(r.get())
-            i += 1
-            if i % 50 == 0:
-                logging.info("working... already created a total of %d vectors", i)
-                workingTimer.tick()
-                estimatedLeft = float(workingTimer.elapsed_time) / i * (n-i)
-                eta = datetime.now() + timedelta(seconds=int(estimatedLeft))
-                logging.info("           about %.2f seconds left for this vector set", estimatedLeft)
-                logging.info("           estimated end: %s", eta.strftime("%H:%M:%S"))
-                self.mytimer.tick()
-
-        pool.close()
-        pool.join()
-        self.mytimer.tick()
-        logging.info("VECTORS DONE - generated %d vectors", len(results))
-        return results
+        comp_stats = 0
+        
+        if (comp_stats == 1):
+            
+            n_feats = len(self.texel_features)
+            #print 'feats',n_feats
+            n_pics = len(trainset)
+            count =  0
+            d_diff = []
+            
+            global global_feature_images
+            global global_labels
+            
+            #print '1',global_feature_images
+            global_feature_images = trainset
+            global_labels = labels
+            #print '2',global_feature_images
+            
+            nCores = mp.cpu_count()
+            pool = mp.Pool(nCores)
+            results = []
+            
+            for i in xrange(0,n_feats):
+                #print 'Hello'
+                #print compute_distance(self.texel_features[i])
+                results.append(pool.apply_async(compute_distance, [self.texel_features[i]]))
+                #print count
+                #count = count + 1
+                #self.mytimer.tick()    
+            
+            for r in results:
+                #print r.get()
+                d_diff.append(r.get())
+            
+            pool.close()
+            pool.join()
+            
+            print 'DIFF DONE'
+            self.mytimer.tick()
+         
+            #print d_diff
+         
+            n_new = len(d_diff)
+            mean_dev = 0
+            var = 0
+            std_dev = 0
+             
+            mean = np.mean(d_diff)
+            
+             
+            for k in xrange(0,n_new):
+                resu = abs(d_diff[k]-mean)
+                mean_dev = mean_dev + resu
+                var = var + resu*resu/n_new
+            mean_dev = mean_dev / n_new
+            std_dev = np.sqrt(var)
+            
+            self.stats.append(mean)
+            self.stats.append(mean_dev)
+            self.stats.append(var)
+            self.stats.append(std_dev)
+             
+            print 'Mean distance over all {0} texels = {1}'.format(len(self.texel_features),mean)
+            print 'Mean deviation over all {0} texels = {1}'.format(len(self.texel_features),mean_dev)
+            print 'Variance over all {0} texels = {1}'.format(len(self.texel_features),var)
+            print 'Standard deviation over all {0} texels = {1}'.format(len(self.texel_features),std_dev)
+            
+            #Side_Functions.save_data("../saved/statistics", self.stats)             
+                     
+            
+        elif (comp_stats == 0):
+            
+            n = len(trainset)
+            logging.info("COMPUTING %d VECTORS", n)
+    
+            nCores = mp.cpu_count()
+            pool = mp.Pool(nCores)
+            asyncres = []
+            for i in xrange(0, n):
+                asyncres.append(pool.apply_async(compute_features, [trainset[i], self.texel_features]))
+    
+            results = []
+            workingTimer = TimeManager()
+            i = 0
+            for r in asyncres:
+                results.append(r.get())
+                i += 1
+                if i % 50 == 0:
+                    logging.info("working... already created a total of %d vectors", i)
+                    workingTimer.tick()
+                    estimatedLeft = float(workingTimer.elapsed_time) / i * (n-i)
+                    eta = datetime.now() + timedelta(seconds=int(estimatedLeft))
+                    logging.info("           about %.2f seconds left for this vector set", estimatedLeft)
+                    logging.info("           estimated end: %s", eta.strftime("%H:%M:%S"))
+                    self.mytimer.tick()
+    
+            pool.close()
+            pool.join()
+            self.mytimer.tick()
+            logging.info("VECTORS DONE - generated %d vectors", len(results))
+            return results
 
     def saveState(self):
         state = (self.texel_features, self.feature_border, self.distance_threshold, self.num_features, self.maxTexelPics)

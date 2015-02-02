@@ -27,10 +27,10 @@ class FeatureProvider(object):
 
     def initialize(self):
         logging.info("Loading FeatureProvider. Intializing FeatureExtractor")
-        self._featureExtrator.initialize(self._dataprovider.TrainData)
+        self._featureExtrator.initialize(self._dataprovider.TrainData,self._dataprovider.TrainLabels)
 
         logging.info("Extracting features from TrainData")
-        self.TrainData = np.mat(self._featureExtrator.extract(self._dataprovider.TrainData))
+        self.TrainData = np.mat(self._featureExtrator.extract(self._dataprovider.TrainData,self._dataprovider.TrainLabels))
         self.TrainLabels = np.mat(self._dataprovider.TrainLabels).transpose()
         
         logging.info("Extracting features from ValidationData")

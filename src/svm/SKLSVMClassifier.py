@@ -1,7 +1,7 @@
 
 import logging
 from Classifier import Classifier
-from sklearn.svm import NuSVC
+#from sklearn.svm import NuSVC
 from numpy import shape
 
 class SKLSVMClassifier(Classifier):

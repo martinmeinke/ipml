@@ -219,7 +219,7 @@ def main():
     generateAndSaveFeatures.SaveExtractedFeatures = True
     generateAndSaveFeatures.FeatureExtractionArgs = {
         'num_features' : 1000,
-        'max_texel_pics' : 5000
+        'max_texel_pics' : 2000
     }
 
     runSVMWith8000_500 = IMPLRunConfiguration()
@@ -275,7 +275,7 @@ def main():
         conf.RunSklSVM = True
         conf.SVMArgs = args
         trainSVMConfs.append(conf)
-    runDriver(sklVsOwnSVM)
+    runDriver(generateAndSaveFeatures)
 
 
     

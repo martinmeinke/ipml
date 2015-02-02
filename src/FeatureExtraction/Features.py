@@ -10,6 +10,7 @@ import logging
 from matplotlib import pyplot as plt
 from math import floor
 
+import FeatureClass
 
 def cutimage(image,edgesize):
     
@@ -60,8 +61,14 @@ def update_feature_list(feature_list, texel_list, dist_threshold, max_num_of_fea
         d_max,d_min = dist_from_texel_set(feature_list, texel)
         #print 'd_max,d_min',d_max,d_min
         if d_min > dist_threshold:
-            feature_list.append(texel)
-            c_added = c_added + 1
+            diff = FeatureClass.compute_distance(texel)
+            if (diff > 0.00265673897882 + 0.00237268385662): #mean +  standard dev
+                feature_list.append(texel)
+                c_added = c_added + 1
+                #print 'drin'
+            else:
+                c_discarted =  c_discarted +1
+                #print 'raus'
         else:
             c_discarted =  c_discarted +1
         if c_added % 100 == 0 and c_added != last_written:

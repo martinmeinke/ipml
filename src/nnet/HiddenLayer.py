@@ -9,6 +9,7 @@ import theano
 import theano.tensor as T
 from nnet.Layer import Layer
 from nnet.SubsamplingLayer import SubsamplingLayer
+from nnet.ConvLayer import ConvLayer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 # start-snippet-1
 class HiddenLayer(Layer):
     def __init__(self, rng, n_out, W=None, b=None,
-                 activation=0):
+                 activation=0, regularizer_weight=1):
         """
         Typical hidden layer of a MLP: units are fully-connected and have
         sigmoidal activation function. Weight matrix W is of shape (n_in,n_out)
@@ -45,7 +46,8 @@ class HiddenLayer(Layer):
         self.W = W
         self.b = b
         self.activation = activation
-
+        self.reg_weight = regularizer_weight
+    
     def build(self):
         n_in = self.previous.num_outputs
 
@@ -69,13 +71,17 @@ class HiddenLayer(Layer):
             self.W = theano.shared(value=W_values, name='W', borrow=False)
 
         if self.b is None:
-            b_values = numpy.zeros((self.n_out,), dtype=theano.config.floatX)  # @UndefinedVariable
+            #relus are useless in ther 0-zone
+            if self.activation == 1:
+                b_values = numpy.ones((self.n_out,), dtype=theano.config.floatX)  # @UndefinedVariable
+            else:
+                b_values = numpy.zeros((self.n_out,), dtype=theano.config.floatX)  # @UndefinedVariable
             self.b = theano.shared(value=b_values, name='b', borrow=False)
 
-        # convert input into a flat representation 
+        # convert input into a flat representation
         # (no more depth in feature maps, or 2d images - just a
         # 1 d layer of regular neurons
-        if isinstance(self.previous, SubsamplingLayer):
+        if isinstance(self.previous, SubsamplingLayer) or isinstance(self.previous, ConvLayer):
             self.input = self.input.flatten(2)
 
         lin_output = T.dot(self.input, self.W) + self.b
@@ -102,7 +108,10 @@ class HiddenLayer(Layer):
         # parameters of the model
         self.params = [self.W, self.b]
         self.regularized_params = [self.W]
+        self.regularized_params_weights = [self.reg_weight]
 
     def restore_params(self):
-        self.W.container.data = self.params[0].container.data
-        self.b.container.data = self.params[1].container.data
+        # self.W.container.data = self.params[0].container.data
+        # self.b.container.data = self.params[1].container.data
+        self.W.set_value(self.params[0].container.data)
+        self.b.set_value(self.params[1].container.data)

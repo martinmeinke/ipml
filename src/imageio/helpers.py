@@ -13,7 +13,15 @@ from math import ceil, sqrt, log
 import sys
 from select import select
 import itertools
+import time
 import re
+import gc
+from nnet import ConvLayer
+from nnet.SubsamplingLayer import SubsamplingLayer
+from nnet.NormLayer import NormLayer
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def plot_qimage_grayscale(image, title=''):
@@ -75,25 +83,56 @@ def plot_misclassified_images(misclassified_images, test_set, max_images=36, edg
     plt.figure(1)
 
 
-def plot_kernels(layers, layerids, figids):
+def plot_layer_output(layer_outputs):
+    logger.info("Plotting {} layers".format(len(layer_outputs)))
+    
+    for lo, loid in zip(layer_outputs, range(len(layer_outputs))):
+        logger.info("Layer output shape: {}".format(lo.shape))
+        num_filters = lo.shape[1]
+        img = lo[1]
+        
+        plt.figure(100 + loid)
+
+        edge_len = ceil(sqrt(num_filters))
+        for filter in range(num_filters):
+            plt.subplot(edge_len, edge_len, filter)
+            plt.imshow(img[filter], cmap=plt.get_cmap("gray"), vmin = -0.5, vmax = 0.5)
+    plt.figure(1)
+
+
+def plot_kernels(layers, model_name):
+    layerids = []
+    for l, i in zip(layers, range(len(layers))):
+        if isinstance(l, ConvLayer):
+            layerids.append(i)
+    
+    figids = range(2, 2 + len(layerids) + 1)
+    
     for layer, figid in zip(layerids, figids):
         plt.figure(figid)
         plt.title("Layer: {}".format(layer))
 
         kernels = layers[layer].fshp[0]
-
+            
         for i in range(1, kernels + 1):
             plt.subplot(ceil(sqrt(kernels)), ceil(sqrt(kernels)), i)
-            kernel = numpy.copy(layers[layer].W.container.data[i - 1][0])
+            kernel = numpy.copy(layers[layer].W.get_value()[i - 1][0])
             # normalized = kernel + abs(numpy.min(kernel))
             plt.imshow(
                 kernel, cmap='BrBG', interpolation='none', vmin=-0.5, vmax=0.5)
-
+            
         plt.draw()
+        plt.savefig("../../plots/m_{}_l_{}.png".format(model_name, layer))
     # switch back to the main figure (TODO: there might be an API call to get
     # the previously active figure)
     plt.figure(1)
 
+def write_kaggle_output(labels, modelname):
+    # write file which can be uploaded to kaggle for eval
+    with open("../../kaggle_out_{}.csv".format(modelname), "w") as f:
+        f.write("id,label\n")
+        for num, label in zip(range(1, len(labels)+1), labels):
+            f.write("{},{}\n".format(num, label))
 
 def check_break():
     print "Press key to interrupt training after current epoch..."
@@ -172,7 +211,8 @@ def resize_image(image, edgelength, stride=-1):
         box = (left, top, right, bottom)
         boxes.append(box)
     else:
-        positions = range(0, diff, stride)
+        #positions = range(0, diff, stride)
+        positions = [(diff/(stride-1)) * i for i in range(stride)]
         if width > height:  # landscape
             for p in positions:
                 left = p
@@ -254,9 +294,9 @@ def rgb2gray(rgb):
 def convert_image_representation(image, eval_dog=True):
     x = open_image(image)
     if eval_dog:
-        return (numpy.array(x[0]), isdog(x[1]))
+        return (numpy.asarray(x[0]), isdog(x[1]))
     else:
-        return (numpy.array(x[0]), x[1])
+        return (numpy.asarray(x[0]), x[1])
 
     return x
 
@@ -309,6 +349,9 @@ def create_samples(image_path, partitiondef=(6, 2, 2), partial=100, train_enhanc
 
         sets.append((numpy.asarray(map(lambda x: x[0], images)), numpy.asarray(
             map(lambda x: x[1], images))))
+        
+        del images
+        gc.collect()
 
 #     images = map(lambda x: convert_image_representation(
 #         image_path + '/' + x), filenames)
@@ -326,21 +369,24 @@ def create_samples(image_path, partitiondef=(6, 2, 2), partial=100, train_enhanc
 
 def lr_decay(lrl, lrt0, decrease_factor, t):
     """models the learning rate decay over time t"""
-    return lrl / (lrt0 + (log(t * decrease_factor + 2))) - 0.012
+    return lrl / (lrt0 + (log(t * decrease_factor + 2))) - 0.008
+
+def lr_decay2(lrl, t, rate = 0.988):
+    """models the learning rate decay over time t"""
+    return lrl * (rate ** t)
 
 
 def plot_lr_decay():
-    t = numpy.arange(0, 100, 1)
+    t = numpy.arange(0, 200, 1)
 
-    ranges = [[0.04],
-              [1],
-              [0.15]]
+    ranges = [[0.025],
+              [0.5]]
 
-    for lrl, lrt0, decfac in list(itertools.product(*ranges)):
-        s = map(lambda x: lr_decay(lrl, lrt0, decfac, x), t)
+    for lrl, decfac in list(itertools.product(*ranges)):
+        s = map(lambda x: lr_decay2(lrl, x), t)
         plt.figure(1)
-        plt.plot(t, s, lw=2, label="{}/{}/{}".format(
-            lrl, lrt0, decfac))
+        plt.plot(t, s, lw=2, label="{}/{}".format(
+            lrl, decfac))
     plt.legend()
     plt.show()
 
@@ -359,21 +405,31 @@ def main():
     # resize_images()
     # train, cv, test = create_samples(tstpath)
 
-    source_dataset = "../../data/train_orig"
-    target_dataset = "../../data/train_48_s40"
-
-    # CENTER CUT
-    resize_images_quadratic(
-        source_dataset, target_dataset, edgelen=48, stride=-1)
-
-    # STRIDE CUT
-    resize_images_quadratic(
-        source_dataset, target_dataset, edgelen=48, stride=40)
-
-    # MIRRORED
-    flip_images(target_dataset)
-
-    # plot_lr_decay()
+    #     source_dataset = "../../data/train_orig"
+    #     target_dataset = "../../data/train_48_s3"
+    
+#     sds = ["../../data/test_orig", "../../data/test_orig"]
+#     tds = ["../../data/test_kaggle_128", "../../data/test_kaggle_72"]
+#     edgelens = [128,72]
+#     strides = [-1,-1]
+#      
+#     for src, tgt, edge, stri in zip(sds, tds, edgelens, strides):
+#          
+#         print("Processing: {}/{}/{}/{}".format(src, tgt, edge, stri))
+#      
+#         # CENTER CUT
+#         resize_images_quadratic(
+#             src, tgt, edgelen=edge, stride=-1)
+#      
+#         if stri != -1:
+#             # STRIDE CUT
+#             resize_images_quadratic(
+#                 src, tgt, edgelen=edge, stride=stri)
+#          
+#             # MIRRORED
+#             flip_images(tgt)
+    
+    plot_lr_decay()
     pass
 
 if __name__ == '__main__':

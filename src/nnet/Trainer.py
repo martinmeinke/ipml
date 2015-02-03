@@ -5,6 +5,7 @@ import theano
 import sys
 import math
 import os
+import json
 import theano.tensor as T
 import time
 from random import randrange
@@ -13,6 +14,10 @@ import matplotlib.pyplot as plt
 from imageio import DatasetManager
 from imageio import helpers
 from numpy import int8
+from imageio.partition_manager import PartitionManager
+from nnet.ConvLayer import ConvLayer
+from nnet.SubsamplingLayer import SubsamplingLayer
+from nnet.NormLayer import NormLayer
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +47,8 @@ def shared_dataset(data_xy, borrow=True):
         # floats it doesn't make sense) therefore instead of returning
         # ``shared_y`` we will have to cast it to int. This little hack
         # lets ous get around this issue
-        return shared_x, T.cast(shared_y, 'int32')
+        # return shared_x, T.cast(shared_y, 'int32')
+        return shared_x, shared_y
 
 
 def shared_dataset_x(data_x, borrow=True):
@@ -71,13 +77,17 @@ def shared_dataset_x(data_x, borrow=True):
 
 
 class Trainer(object):
-
+    pm = None
     dataset_manager = DatasetManager("../../serialized_datasets")
     datasets = None
-
+    
+    model_name = ""
+    
     img_width = 0
     img_height = 0
 
+    sets = []
+    
     # allocate symbolic variables for the data
     x = None
     y = None
@@ -99,19 +109,21 @@ class Trainer(object):
     validation_model = None
     train_validation_model = None
     training_model = None
+    
+    layer_output_model = None
+    update_learning_rate_theano = None
+    
+    # TODO: not implemented yet
+    validation_enabled = True
+    test_enabled = True
+    plot_output_enabled = True
 
     network = None
 
     # training parameters
-    patience = 30000                # run for this many iterations regardless
-    # wait this much longer when a new best is found
-    patience_increase = 2
-    # a relative improvement of this much is considered significant
-    improvement_threshold = 0.995
     validation_frequency = 0        # validate set every x minibatches
 
     best_validation_loss = numpy.inf
-    best_iter = 0
     test_score = 0
 
     start_time = None
@@ -122,43 +134,77 @@ class Trainer(object):
     classdocs
     '''
 
-    def __init__(self, lr_lambda=0.002, batch_size=200, n_epochs=120, lr_decay=True):
+    def __init__(self, lr_lambda=0.025, batch_size=128, n_epochs=200, lr_decay=True):
         '''
         Constructor
         '''
+        # we want to modify the learning rate, hence use a theano scalar
+        self.theano_lr = T.scalar('lr', dtype=theano.config.floatX)
+        self.learning_rate = lr_lambda
         self.n_epochs = n_epochs
         self.batch_size = batch_size
         self.learning_rate_lambda = lr_lambda
-        self.learning_rate = lr_lambda
         self.learning_rate_decay = lr_decay
 
     def update_learning_rate(self, t, decrease_speed=0.15):
         '''
         lowers the learning rate, as the learning proceeds
         '''
-        self.learning_rate = max(helpers.lr_decay(self.learning_rate_lambda,
-                                                  self.learning_rate_t0,
-                                                  decrease_speed, t), 0.0001)
-
-        logger.info("Current learning rate: {}".format(
-                    self.learning_rate))
+        if self.learning_rate_decay:
+            newLR = helpers.lr_decay2(self.learning_rate_lambda, t)
+            self.learning_rate = max(newLR, 0.001)
+            logger.info("Current learning rate: {}".format(self.learning_rate))
 
     def plot_datapoint(self, series, y, epoch):
-        '''
+        """
         Plots a the given datapoint y to the main figure(1), 
         using the epoch as an x value
-        '''
+        """
         plt.plot(self.epoch, y, self.PLOT_SYMBOLS[
                  series], label=series if self.epoch == 1 else "")
 
-    def run_training(self):
-        start_time = time.clock()
-        # TODO: plot lr aswell
-#         gs = gridspec.GridSpec(2, 1, width_ratios=[3, 1]) 
-#         ax0 = plt.subplot(gs[0])
-#         ax0.plot(x, y)
-#         ax1 = plt.subplot(gs[1])
+    def early_stopping(self, rule=1):
+        """
+        stops training early if a certain condition is met
+        """
+        val = self.results["validation"]
+        NUM_WORSE_EPOCHS = 15
+        
+        # validation score got worse for x continuous epochs
+        if rule == 0:
+            count = 0
+            if len(val) > NUM_WORSE_EPOCHS:
+                # validation error worsened 3 times in a row
+                for i in range(0, NUM_WORSE_EPOCHS):
+                    # error got worse
+                    if val[-1 - i] > val[-2 - i]:
+                        count += 1
+                if NUM_WORSE_EPOCHS == count:
+                    return True
+                
+        # if the best validation score hasn't been improved for x epochs
+        if rule == 1:
+            if len(val) == 0:
+                return False
+            
+            bestidx = numpy.argmin(val)
+            curridx = len(val) - 1
+            
+            # return true if the result didn't improve for NWE epochs
+            if curridx - bestidx > NUM_WORSE_EPOCHS - 1:
+                return True
+            
+        return False
 
+    def run_training(self, dataset_manager=None):
+        """
+        runs the actual training
+        """
+        
+        # place to store the results
+        self.results = {"training": [], "validation": [], "best_test": [], "lr": []}
+
+        # TODO: consider moving the plotting code out of here...
         plt.figure(1)
         plt.axis([0, self.n_epochs, 0, 0.6])
         plt.xlabel('Epoch')
@@ -168,60 +214,70 @@ class Trainer(object):
         plt.ion()
         plt.show()
 
-        # einmal alle bilder sehen = epoch
+        start_time = time.clock()
         done_looping = False
-
         try:
             while (self.epoch < self.n_epochs) and (not done_looping):
-
-                helpers.plot_kernels(self.network.layers,
-                                     layerids=(0, 2, 4),
-                                     figids=(2, 3, 4))
-
-                if self.learning_rate_decay:
-                    # decrease the learning rate to yield better results
-                    self.update_learning_rate(self.epoch)
+                self.epoch = self.epoch + 1
+                
+                # plots the kernels of the Convolutional layers
+                helpers.plot_kernels(self.network.layers, self.model_name)
+                
+                # decrease the learning rate over time
+                self.update_learning_rate(self.epoch)
 
                 # stop the training, if a key was pressed during last iteration
                 if helpers.check_break():
                     break
 
-                self.epoch = self.epoch + 1
                 for minibatch_index in xrange(self.n_train_batches):
 
-                    # 1 batch = 1 iteration?
+                    # 1 batch = 1 iteration
                     iternum = (self.epoch - 1) * \
                         self.n_train_batches + minibatch_index
 
                     # output the iteration number from time to time
                     if iternum % 10 == 0:
                         logger.info("training @ iternum = {}".format(iternum))
-
-                    cost_ij, regularization = self.training_model(minibatch_index)
+                    
+                    """"
+                    swap in the correct partition for the test set if required.
+                    this is done, to enable the gpu to process huge datasets even
+                    if they don't fit into GPU RAM
+                    """
+                    mb_index = self.pm.swap_in_partition(0, minibatch_index)
+                    
+                    # runs the mini-batch through the network and applies updates
+                    cost_ij, regularization = self.training_model(mb_index, self.learning_rate)
 
                     # monitor changes in one specific minibatch
                     if minibatch_index == 0:
                         # only for debugging
-                        logger.debug(
-                            "Regularization cost: {}".format(regularization))
+                        logger.info("Regularization cost: {}".format(regularization))
                         logger.info("Training model cost: {}".format(cost_ij))
 
                     if (iternum + 1) % self.validation_frequency == 0:
 
-                        training_losses = [self.train_validation_model(i) for i
-                                           in xrange(self.n_train_batches)]
-
-                        logger.debug(
-                            "Training losses: {}".format(training_losses))
+                        training_losses = []
+                        for i in xrange(self.n_train_batches):
+                            mb_index = self.pm.swap_in_partition(0, i)
+                            training_losses.append(self.train_validation_model(mb_index)) 
+ 
+                        logger.debug("Training losses: {}".format(training_losses))
+ 
+                        this_training_loss = numpy.mean(training_losses)
 
                         # compute zero-one loss on validation set
                         validation_losses = [self.validation_model(i) for i
                                              in xrange(self.n_valid_batches)]
+                        
+                        if self.plot_output_enabled:
+                            layer_outputs = self.layer_output_model(0)
+                            # plots the output of the the network layers (eg. convoluted images)
+                            helpers.plot_layer_output(layer_outputs)
 
-                        logger.debug(
-                            "Training losses: {}".format(validation_losses))
+                        logger.debug("Validation losses: {}".format(validation_losses))
 
-                        this_training_loss = numpy.mean(training_losses)
                         this_validation_loss = numpy.mean(validation_losses)
 
                         print("epoch {}, minibatch {}/{}, training_error: {}, "
@@ -230,56 +286,57 @@ class Trainer(object):
                                   1, self.n_train_batches,
                                   this_training_loss * 100.,
                                   this_validation_loss * 100.))
-
-                        self.plot_datapoint(
-                            "Training", this_training_loss, self.epoch)
-                        self.plot_datapoint(
-                            "Validation", this_validation_loss, self.epoch)
+ 
+                        self.plot_datapoint("Training", this_training_loss, self.epoch)
+                        self.plot_datapoint("Validation", this_validation_loss, self.epoch)
                         plt.draw()
 
                         # if we got the best validation score until now
                         if this_validation_loss < self.best_validation_loss:
 
-                            # improve patience if loss improvement is good
-                            # enough
-                            if this_validation_loss < self.best_validation_loss *  \
-                               self.improvement_threshold:
-                                self.patience = max(
-                                    self.patience, iternum * self.patience_increase)
+                            if dataset_manager is not None:
+                                # store the currently best model
+                                dataset_manager.store(self.network.model_params, self.model_name)
 
                             # save best validation score and iteration number
                             self.best_validation_loss = this_validation_loss
-                            self.best_iter = iternum
+                            best_iter = iternum
 
-                            # test it on the test set
-                            test_losses = [
-                                self.test_model(i)[1]
-                                for i in xrange(self.n_test_batches)
-                            ]
+                            # also process test set
+                            if self.test_enabled:
+                                # test it on the test set
+                                test_losses = [
+                                    self.test_model(i)[1]
+                                    for i in xrange(self.n_test_batches)
+                                ]
+    
+                                # test it on the test set
+                                misclassified_images = [
+                                    self.test_model(i)[0]
+                                    for i in xrange(self.n_test_batches)
+                                ]
+    
+                                # plot a couple of misclassified images
+                                helpers.plot_misclassified_images(
+                                    misclassified_images, self.datasets[2], edgelen=self.img_width)
+    
+                                self.test_score = numpy.mean(test_losses)
+                                print(('     epoch %i, minibatch %i/%i, test error of '
+                                       'best model %f %%') %
+                                      (self.epoch, minibatch_index + 1, self.n_train_batches,
+                                       self.test_score * 100.))
+    
+                                # self.plot_datapoint("Test", self.test_score)
+                                plt.draw()
 
-                            # test it on the test set
-                            misclassified_images = [
-                                self.test_model(i)[0]
-                                for i in xrange(self.n_test_batches)
-                            ]
+                        # store results of this iteration
+                        self.results["training"].append(this_training_loss)
+                        self.results["validation"].append(this_validation_loss)
+                        self.results["best_test"].append(self.test_score)
+                        self.results["lr"].append(self.learning_rate)
 
-                            helpers.plot_misclassified_images(
-                                misclassified_images, self.datasets[2], edgelen=self.img_width)
-
-                            self.test_score = numpy.mean(test_losses)
-                            print(('     epoch %i, minibatch %i/%i, test error of '
-                                   'best model %f %%') %
-                                  (self.epoch, minibatch_index + 1, self.n_train_batches,
-                                   self.test_score * 100.))
-
-                            logger.info(
-                                "Patience: {}, iter: {}".format(self.patience, iternum))
-
-                            # self.plot_datapoint("Test", self.test_score)
-                            plt.draw()
                     # break training, afrer we've been patient enough
-                    if self.patience <= iternum:
-                        self.patience += 1
+                    if self.early_stopping():
                         done_looping = True
                         break
 
@@ -291,21 +348,29 @@ class Trainer(object):
             format(self.learning_rate, self.batch_size, self.test_score, self.n_train_samples)
         plt.title(plottxt)
 
-        plotname = "../../plots/{}.png".format(time.strftime("%c"))
+        now = time.strftime("%c")
+        plotname = "../../plots/{}_{}.png".format(now, self.model_name)
+        dataname = "../../plots/{}_{}.json".format(now, self.model_name)
+        
         logger.info("Saving plot: {}".format(plotname))
         plt.savefig(plotname)
-
+        with open(dataname, "w") as f:
+            f.write(json.dumps(self.results))
+        
         end_time = time.clock()
         logger.info('Optimization complete.')
         logger.info('Best validation score of %f %% obtained at iteration %i, '
                     'with test performance %f %%' %
-                    (self.best_validation_loss * 100., self.best_iter + 1, self.test_score * 100.))
+                    (self.best_validation_loss * 100., best_iter + 1, self.test_score * 100.))
         print >> sys.stderr, ('The code for file ' +
                               os.path.split(__file__)[1] +
                               ' ran for %.2fm' % ((end_time - start_time) / 60.))
 
     def evaluate_test_set(self):
-        # test it on the test set
+        """
+        let the network label all images in the test set
+        returns a flat representation of all images in the test set
+        """
         labels = [
             self.prediction_model(i)[0]
             for i in xrange(self.n_test_batches)
@@ -317,7 +382,31 @@ class Trainer(object):
     def get_input_size(self):
         return (self.batch_size, 1, self.img_width, self.img_height)
 
-    def create_test_model(self):
+    def compute_layer_outputs(self, layertypes=(ConvLayer, NormLayer)):
+        """
+        model for computing the outputs of certain layertypes
+        possible types include: ConvLayer, NormLayer, SubsamplingLayer
+        """
+        valid_set_x, valid_set_y = self.datasets[1]
+        
+        compute_outputs = []
+        for lid in range(len(self.network.layers)):
+            layer = self.network.layers[lid]
+            if isinstance(layer, layertypes): 
+                compute_outputs.append(layer.output)
+                
+        self.layer_output_model = theano.function(
+            [self.index],
+            compute_outputs,
+            givens={
+                self.x: valid_set_x[self.index * self.batch_size: (self.index + 1) * self.batch_size]
+            }
+        )
+
+    def configure_test_model(self):
+        """
+        compute the test losses
+        """
         test_set_x, test_set_y = self.datasets[2]
 
         # create a function to compute the mistakes that are made by the model
@@ -326,11 +415,14 @@ class Trainer(object):
             [self.network.errorslist, self.network.errors],
             givens={
                 self.x: test_set_x[self.index * self.batch_size: (self.index + 1) * self.batch_size],
-                self.y: test_set_y[self.index * self.batch_size: (self.index + 1) * self.batch_size]
+                self.y: T.cast(test_set_y[self.index * self.batch_size: (self.index + 1) * self.batch_size], 'int32')
             }
         )
 
     def create_prediction_model(self):
+        """
+        model for computing the networks predictions for the test set
+        """
         test_set_x = self.datasets[0]
 
         # create a function to compute the mistakes that are made by the model
@@ -342,7 +434,10 @@ class Trainer(object):
             }
         )
 
-    def create_validation_model(self):
+    def configure_validation_model(self):
+        """
+        compute the validation losses
+        """
         valid_set_x, valid_set_y = self.datasets[1]
 
         self.validation_model = theano.function(
@@ -350,11 +445,15 @@ class Trainer(object):
             self.network.errors,
             givens={
                 self.x: valid_set_x[self.index * self.batch_size: (self.index + 1) * self.batch_size],
-                self.y: valid_set_y[self.index * self.batch_size: (self.index + 1) * self.batch_size]
+                self.y: T.cast(valid_set_y[self.index * self.batch_size: (self.index + 1) * self.batch_size], 'int32')
             }
         )
 
-    def create_train_validation_model(self):
+    def configure_train_validation_model(self):
+        """
+        for debug:
+        compute the training losses, without applying updates
+        """
         train_set_x, train_set_y = self.datasets[0]
 
         self.train_validation_model = theano.function(
@@ -362,31 +461,44 @@ class Trainer(object):
             self.network.errors,
             givens={
                 self.x: train_set_x[self.index * self.batch_size: (self.index + 1) * self.batch_size],
-                self.y: train_set_y[self.index * self.batch_size: (self.index + 1) * self.batch_size]
+                self.y: T.cast(train_set_y[self.index * self.batch_size: (self.index + 1) * self.batch_size], 'int32')
             }
         )
 
-    def create_training_model(self):
+    def replace_training_partition(self, tgtpartition):
+        """
+        swaps in another training data partition
+        """
+        samples_per_partition = self.batch_size * PartitionManager.MAX_BATCHES_PER_PARTITION
+        start = tgtpartition * samples_per_partition
+        end = (tgtpartition + 1) * samples_per_partition
+        x = self.sets[0][0][start: end]
+        y = self.sets[0][1][start: end]
+        
+        self.datasets[0][0].set_value(x)
+        self.datasets[0][1].set_value(y)
+        
+    def configure_training_model(self):
+        """
+        create trainin model
+        """
         train_set_x, train_set_y = self.datasets[0]
 
-        # train_model is a function that updates the model parameters by
-        # SGD Since this model has many parameters, it would be tedious to
-        # manually create an update rule for each model parameter. We thus
-        # create the updates list by automatically looping over all
-        # (params[i], grads[i]) pairs.
+        epoch = T.lscalar()
+        
         # TODO: different lr for different layer types
         updates = [
-            (param_i, param_i - self.learning_rate * grad_i)
+            (param_i, param_i - self.theano_lr * grad_i)
             for param_i, grad_i in zip(self.network.model_params, self.network.gradients)
         ]
-
+        
         self.training_model = theano.function(
-            [self.index],
+            [self.index, self.theano_lr],
             [self.network.cost, self.network.regularization_term],
             updates=updates,
             givens={
                 self.x: train_set_x[self.index * self.batch_size: (self.index + 1) * self.batch_size],
-                self.y: train_set_y[self.index * self.batch_size: (self.index + 1) * self.batch_size]
+                self.y: T.cast(train_set_y[self.index * self.batch_size: (self.index + 1) * self.batch_size], 'int32')
             }
         )
 
@@ -394,9 +506,9 @@ class Trainer(object):
         # use the negative log likelihood of the softmax layer
         logreg_layer = self.network.layers[-1]
         self.network.regularization_term = logreg_layer.regularization(
-            self.network.regularized_params)
+            self.network.regularized_params, self.network.regularized_params_weights)
         self.network.cost = logreg_layer.nll(
-            self.y) + logreg_layer.regularization(self.network.regularized_params)
+            self.y) + logreg_layer.regularization(self.network.regularized_params, self.network.regularized_params_weights)
         self.network.errorslist = self.network.layers[-1].errorslist(self.y)
         self.network.errors = self.network.layers[-1].errors(self.y)
 
@@ -405,38 +517,39 @@ class Trainer(object):
             self.network.cost, self.network.model_params)
 
         if run_mode == 0:
-            self.create_training_model()
-            self.create_validation_model()
-            self.create_train_validation_model()
-            self.create_test_model()
+            self.configure_training_model()
+            self.configure_validation_model()
+            self.configure_train_validation_model()
+            if self.test_enabled:
+                self.configure_test_model()
         elif run_mode == 1:
             self.create_prediction_model()
+            
+        if self.plot_output_enabled:
+            self.compute_layer_outputs()
 
     def compute_training_parameters(self):
-        train_set_x = self.datasets[0][0]
-        valid_set_x = self.datasets[1][0]
-        test_set_x = self.datasets[2][0]
-
-        # start-snippet-1
-        self.x = T.matrix('x')  # the data is presented as rasterized images
-        self.y = T.ivector('y')  # the labels are presented as 1D vector of
-        # [int] labels
-
-        self.n_train_samples = train_set_x.get_value(borrow=True).shape[0]
-        self.n_valid_samples = valid_set_x.get_value(borrow=True).shape[0]
-        self.n_test_samples = test_set_x.get_value(borrow=True).shape[0]
+        self.n_train_samples = self.sets[0][0].shape[0]
+        self.n_valid_samples = self.sets[1][0].shape[0]
+        if self.test_enabled:
+            self.n_test_samples = self.sets[2][0].shape[0]
 
         logger.info("Set sizes:\n\tTrain: {}\n\tValid: {}\n\tTest: {}"
                     .format(self.n_train_samples, self.n_valid_samples, self.n_test_samples))
 
         self.n_train_batches = self.n_train_samples / self.batch_size
         self.n_valid_batches = self.n_valid_samples / self.batch_size
-        self.n_test_batches = self.n_test_samples / self.batch_size
+        if self.test_enabled:
+            self.n_test_batches = self.n_test_samples / self.batch_size
 
         # make sure, that the batch size isn't too big
-        assert self.n_train_batches > 0 and self.n_valid_batches > 0 and self.n_test_batches > 0
+        assert self.n_train_batches > 0
 
-        self.index = T.lscalar()  # index to a [mini]batch
+        if self.validation_enabled:
+            assert self.n_valid_batches > 0
+
+        if self.test_enabled:
+            assert self.n_test_batches > 0
 
     def prepare_kaggle_test_data(self, dataset):
         if self.dataset_manager.dataset_available(dataset):
@@ -467,7 +580,7 @@ class Trainer(object):
 
             # need to create a flat representation of the image
             reshape_dims = (test_set.shape[0], flat_img_len)
-            test_set = numpy.reshape(test_set.astype(numpy.float16) / 255, reshape_dims)
+            test_set = numpy.reshape(test_set.astype(numpy.float16, copy=False) / 255, reshape_dims)
 
             print test_set.shape
             self.dataset_manager.store(test_set, dataset, False)
@@ -500,50 +613,67 @@ class Trainer(object):
 
         if self.dataset_manager.dataset_available(stored_ds_name):
             logger.info('loading datasets...')
-            sets = self.dataset_manager.load(stored_ds_name)
+            set_generator = self.dataset_manager.load(stored_ds_name)
+            
+            # TODO: DRY
+            train_set = set_generator.next()
+            self.sets.append(train_set)
+            valid_set = set_generator.next()
+            self.sets.append(valid_set)
 
-            train_set, valid_set, test_set = sets
+            if self.test_enabled:
+                test_set = set_generator.next()
+                self.sets.append(test_set)
+                
             el = int(math.sqrt(train_set[0][1].shape[0]))
             self.img_width = el
             self.img_height = el
         else:
             logger.info('creating datasets...')
-            sets = create_samples(dataset, partitioning, partial, train_enhanced=train_enhanced)
+            self.sets = create_samples(dataset, partitioning, partial, train_enhanced=train_enhanced)
+
+            logger.info('grayscale and typeset datasets...')
 
             # train_set[1].shape  (150,)
             # train_set[0].shape  (150,128,128,3)
-            self.img_width = sets[0][0].shape[1]
-            self.img_height = sets[0][0].shape[2]
+            self.img_width = self.sets[0][0].shape[1]
+            self.img_height = self.sets[0][0].shape[2]
 
             # for each set
-            for i in range(len(sets)):
+            for i in range(len(self.sets)):
                 # grayscale images
-                gray = map(rgb2gray, sets[i][0])
-                sets[i] = (numpy.asarray(gray), numpy.asarray(sets[i][1], int8))
+                self.sets[i] = (numpy.asarray(map(rgb2gray, self.sets[i][0])), numpy.asarray(self.sets[i][1], int8))
 
                 flat_img_len = self.img_width * self.img_height
 
                 # need to create a flat representation of the image
-                reshape_dims = (sets[i][0].shape[0], flat_img_len)
-                sets[i] = (
-                    numpy.reshape(sets[i][0].astype(numpy.float16) / 255,
+                reshape_dims = (self.sets[i][0].shape[0], flat_img_len)
+                self.sets[i] = (
+                    numpy.reshape(self.sets[i][0].astype(numpy.float16, copy=False) / 255,
                                   reshape_dims),
-                    sets[i][1])
+                    self.sets[i][1])
+                
+            train_set = self.sets[0]
+            valid_set = self.sets[1]
+            
+            if self.test_enabled:
+                test_set = self.sets[2]
 
-            train_set, valid_set, test_set = sets
-            self.dataset_manager.store(sets, stored_ds_name)
+            self.dataset_manager.store(self.sets, stored_ds_name)
 
         logger.info(
             "Img dimensions: {}/{}".format(self.img_width, self.img_height))
+        
+        
 
-        for s in sets:
+        for s in self.sets:
             logger.info(
                 "Set details: {}".format(helpers.set_details(s)))
 
         if logger.getEffectiveLevel() is logging.DEBUG:
             # view a couple of images to confirm that the class lables are
             # correct
-            for s in sets:
+            for s in self.sets:
                 for i in range(5):
                     random_index = randrange(0, len(s[0]))
                     plot_qimage_grayscale(
@@ -556,14 +686,27 @@ class Trainer(object):
         # the number of rows in the input. It should give the target
         # target to the example with the same index in the input.
 
-        # move the data to shared theano datasets
-        test_set_x, test_set_y = shared_dataset(test_set)
-        valid_set_x, valid_set_y = shared_dataset(valid_set)
-        train_set_x, train_set_y = shared_dataset(train_set)
-
-        datasets = [(train_set_x, train_set_y), (valid_set_x, valid_set_y),
-                    (test_set_x, test_set_y)]
-
-        self.datasets = datasets
-
         self.compute_training_parameters()
+        self.pm = PartitionManager([self.n_train_batches], [self.replace_training_partition])
+        
+        # create shared dataset with first partition
+        samples_per_partition = self.batch_size * PartitionManager.MAX_BATCHES_PER_PARTITION
+        start = 0
+        end = samples_per_partition
+        xy = (self.sets[0][0][start: end], self.sets[0][1][start: end])
+        
+        # move the data to shared theano datasets
+        train_set_x, train_set_y = shared_dataset(xy)
+        valid_set_x, valid_set_y = shared_dataset(valid_set)
+        
+        if self.test_enabled:
+            test_set_x, test_set_y = shared_dataset(test_set)
+
+            self.datasets = [(train_set_x, train_set_y), (valid_set_x, valid_set_y),
+                             (test_set_x, test_set_y)]
+        else:
+            self.datasets = [(train_set_x, train_set_y), (valid_set_x, valid_set_y)] 
+        
+        self.x = T.matrix('x')  # the data is presented as rasterized images
+        self.y = T.ivector('y')  # the labels are presented as 1D vector of
+        self.index = T.lscalar()  # index to a [mini]batch

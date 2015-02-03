@@ -8,6 +8,7 @@ import numpy
 import theano
 import theano.tensor as T
 from nnet.Layer import Layer
+from nnet.ConvLayer import ConvLayer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class SoftMax(Layer):
     determine a class membership probability.
     """
 
-    def __init__(self, rng, n_out, l1, l2):
+    def __init__(self, rng, n_out, l1, l2, regularizer_weight=1):
         """ Initialize the parameters of the logistic classifiers
 
         :type input: theano.tensor.TensorType
@@ -39,6 +40,7 @@ class SoftMax(Layer):
         self.n_out = n_out
         self.lambda_l1 = l1
         self.lambda_l2 = l2
+        self.reg_weight = regularizer_weight
 
     def build(self):
         n_in = self.previous.num_outputs
@@ -86,6 +88,7 @@ class SoftMax(Layer):
         # parameters of the model
         self.params = [self.W, self.b]
         self.regularized_params = [self.W]
+        self.regularized_params_weights = [self.reg_weight]
 
     def nll(self, y):
         """Return the mean of the negative log-likelihood of the prediction
@@ -119,9 +122,12 @@ class SoftMax(Layer):
         return -T.mean(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
         # end-snippet-2
 
-    def regularization(self, regularized_weights):
-        # the loss
-        return self.lambda_l1 * sum([T.sum(abs(w)) for w in regularized_weights]) + self.lambda_l2 * sum([T.sum(w ** 2) for w in regularized_weights])
+    def regularization(self, regularized_weights, weight):
+        totalw = sum(weight)
+        relweights = [float(i) / totalw for i in weight]
+        # the loss, layers might have different regularization penalties
+        return self.lambda_l1 * sum([T.mean(abs(w))*rel for w, rel in zip(regularized_weights, relweights)]) \
+            + self.lambda_l2 * sum([T.mean(w ** 2)*rel for w,rel in zip(regularized_weights, relweights)])
 
     def errors(self, y):
         """Return a float representing the number of errors in the minibatch
@@ -172,5 +178,8 @@ class SoftMax(Layer):
             raise NotImplementedError()
 
     def restore_params(self):
-        self.W.container.data = self.params[0].container.data
-        self.b.container.data = self.params[1].container.data
+        # self.W.container.data = self.params[0].container.data
+        # self.b.container.data = self.params[1].container.data
+        self.W.set_value(self.params[0].container.data)
+        self.b.set_value(self.params[1].container.data)
+

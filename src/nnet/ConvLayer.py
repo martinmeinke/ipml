@@ -15,7 +15,7 @@ class ConvLayer(Layer):
     classdocs
     '''
 
-    def __init__(self, rng, fshp, imgshp=None, batch_size=0, inpt=None):
+    def __init__(self, rng, fshp, imgshp=None, batch_size=0, inpt=None, regularizer_weight=1):
         """
         Allocate a LeNetConvPoolLayer with shared variable internal parameters.
 
@@ -39,6 +39,7 @@ class ConvLayer(Layer):
         self.imgshp = imgshp
         self.batch_size = batch_size
         self.inpt = inpt
+        self.reg_weight = regularizer_weight
 
     def compute_output_shape(self):
         # TODO
@@ -106,6 +107,8 @@ class ConvLayer(Layer):
         # store parameters of this layer
         self.params = [self.W]
         self.regularized_params = [self.W]
+        self.regularized_params_weights = [self.reg_weight]
 
     def restore_params(self):
-        self.W.container.data = self.params[0].container.data
+        self.W.set_value(self.params[0].container.data)
+        # self.W.container.data = self.params[0].container.data

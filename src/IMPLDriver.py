@@ -284,16 +284,16 @@ def main():
     loadSVMandValidate.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.all.1000.gz")   
            
     
-    params = itertools.product([1, 10, 30, 60, 100, 110, 130, 150, 180], [1.1, 1.3, 1.5, 1.7, 2.0, 2.3, 2.5, 2.7, 3.0])
+    params = itertools.product([10, 30, 60, 100, 110, 130, 150, 180], [1.1, 1.3, 1.5, 1.7, 2.0, 2.3, 2.5, 2.7, 3.0])
     trainSVMConfs = []    
     for C, sigma in params:
         conf = copy.copy(runSVMWithAll_1000)
-        conf.DataProviderMax = 8000
+        conf.DataProviderMax = 6000
         #conf.RunSklSVM = True
         conf.SVMArgs = dict(C=C, maxIter=10, kTup=('rbf', sigma))
         conf.Name = "Run with C=%d and sigma=%0.2f" % (C, sigma)
         trainSVMConfs.append(conf)
-    runDriver(sklVsOwnSVM)
+    runDriver(*trainSVMConfs)
 
 
     

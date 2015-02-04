@@ -1,15 +1,20 @@
 import os
 import logging
 import copy
+import itertools
 from LoggingSetup import LoggingSetup
 from FeatureProvider import FeatureProvider
 from DataProvider import DataProvider
 
 from FeatureExtraction.FeatureClass import FeatureExtractor
 from FeatureExtraction.FeatureFilter import FeatureFilter
-from svm.SVMClassifier import SVMClassifier
+# from svm.TheanoSVMClassifier import SVMClassifier
+# from svm.SVMClassifier import SVMClassifier
+from svm.HybridSVMClassifier import SVMClassifier
 from svm.SKLSVMClassifier import SKLSVMClassifier
 from rf.RFClassifier import RFClassifier
+from Utility import TimeManager
+
 
 DEBUG = True
 
@@ -52,6 +57,8 @@ class IMPLRunConfiguration(object):
         
         self.RunFeatureFilter = False
         self.FeatureFilterArgs = {}
+        self.Name = ""
+
 
 
 class IMPLDriver(object):
@@ -72,7 +79,7 @@ class IMPLDriver(object):
         if self.Setup.RunFeatureFilter:
             ff = FeatureFilter(self.FeatureProvider, self.Setup.DogLabel, self.Setup.CatLabel)
             ff.initFilter()
-            ff.applyFilter(**self.Setup.Feature)
+            ff.applyFilter(**self.Setup.FeatureFilterArgs)
             useFP = ff
         
         if self.Setup.RunCNN:
@@ -142,7 +149,12 @@ class IMPLDriver(object):
             classifier.loadTraining()
         else:
             logging.info("Training the classifier %s", classifier.Name)
+            tm = TimeManager()
             classifier.train(**classifierKwargs)
+            tm.tick()
+            logging.info("Training took %d:%0.2f minutes", int(tm.actual_tick/60), tm.actual_tick%60)
+            logging.info("Computing training error")
+            self._runClassifierOnSet(classifier, "Training", self.FeatureProvider.TrainData, self.FeatureProvider.TrainLabels)
 
         if self.Setup.SaveTraining:
             logging.info("Saving training of classifier %s to file", classifier.Name)
@@ -165,9 +177,11 @@ def runDriver(*configurations):
     logging.info("Running %d different configuration(s)" % len(configurations))
     i = 0
     for conf in configurations:
+        confname = conf.Name or "config %d" % i
         logging.info("-------------")
-        logging.info("Run config %d", i)
+        logging.info("Runing: %s", confname)
         logging.info("-------------")
+        print confname, ": "
         # log exceptions and throw them again
         try:
             driver.run(conf)
@@ -274,11 +288,18 @@ def main():
     runRFWithAll_1000.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.all.1000.gz")
     
     sklVsOwnSVM = copy.copy(runSVMWithAll_1000)
-    sklVsOwnSVM.SVMArgs = dict(C=30, maxIter=10, kTup=('rbf', 1.5))
-    sklVsOwnSVM.DataProviderMax = 1000
+    sklVsOwnSVM.DataProviderMax = 3000
+    sklVsOwnSVM.SVMArgs = dict(C=10, maxIter=10, kTup=('rbf', 1.5))
     sklVsOwnSVM.RunSVM = True
-    #sklVsOwnSVM.RunSklSVM = True
+    sklVsOwnSVM.RunSklSVM = False
+    sklVsOwnSVM.SklSVMArgs = dict(C=10, gamma=0.0001)
     
+    loadSVMandValidate.DataProviderMax = 6000
+    loadSVMandValidate.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.all.1000.gz")
+    loadSVMandValidate.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.all.1000.gz")   
+           
+    
+
     filterFeaturesWith8000_2000 = IMPLRunConfiguration()
     filterFeaturesWith8000_2000.SaveTraining = False
     filterFeaturesWith8000_2000.CreateDataSetPartitioning = False
@@ -291,15 +312,21 @@ def main():
     svmArgs = [
         dict(C=30, maxIter=10, kTup=('rbf', 1.5)),
     ]
+
+    # params = itertools.product([10, 30, 60, 100, 110, 130, 150, 180], [1.1, 1.3, 1.5, 1.7, 2.0, 2.3, 2.5, 2.7, 3.0])
+    params = itertools.product([10, 30, 60, 100, 150], [1.1, 1.3, 1.5, 1.7, 2.0])
     trainSVMConfs = []    
-    for args in svmArgs:
-        conf = copy.copy(runSVMWith8000_500)
-        #conf.DataProviderMax = 8000
-        conf.RunSklSVM = True
-        conf.SVMArgs = args
+    for C, sigma in params:
+        conf = copy.copy(filterFeaturesWith8000_2000)
+        conf.DataProviderMax = 6000
+        conf.RunSVM = True
+        conf.SaveTraining = True
+        conf.SVMArgs = dict(C=C, maxIter=10, kTup=('rbf', sigma))
+        conf.Name = "Run with C=%d and sigma=%0.2f" % (C, sigma)
         trainSVMConfs.append(conf)
     
-        rfArgs=[]
+    
+    rfArgs=[]
     #rfArgs.append(dict(num_attr=32, max_tries=16, subset=int(5000*2/3*0.7), min_gain=-1, thres_steps=30, forest_size=10, max_depth=12))
     #rfArgs.append(dict(num_attr=23, max_tries=23, subset=int(8000*2/3), min_gain=-1, thres_steps=30, forest_size=3, max_depth=11))
     #rfArgs.append(dict(num_attr=23, max_tries=11, subset=int(2000*0.7*2/3), min_gain=-1, thres_steps=30, forest_size=500, max_depth=7))
@@ -328,7 +355,8 @@ def main():
         conf.DataProviderMax = 1000
         conf.RFArgs = args
         trainRFConfs.append(conf)
-    runDriver(filterFeaturesWith8000_2000)
+
+    runDriver(*trainSVMConfs)
 
 
 

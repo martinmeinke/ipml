@@ -143,7 +143,7 @@ def smoP(dataMatIn, classLabels, C, toler, maxIter,kTup=('lin', 0)):    #full Pl
         for i in bounds:
             alphaPairsChanged += innerL(i,oS)
             if runI > 0 and runI % 100 == 0:
-                logging.info("%s, iteration: %d i:%d, pairs changed %d" % (setName, iteration,i,alphaPairsChanged))
+                logging.info("%s, iteration: %d i:%d, pairs changed %d" % (setName, iteration,runI,alphaPairsChanged))
             runI += 1
         iteration += 1
 

@@ -74,13 +74,11 @@ class IMPLDriver(object):
         self._initDataProvider()
         self._initFeatureProvider()
         
-        useFP = self.FeatureProvider
-        
         if self.Setup.RunFeatureFilter:
             ff = FeatureFilter(self.FeatureProvider, self.Setup.DogLabel, self.Setup.CatLabel)
             ff.initFilter()
             ff.applyFilter(**self.Setup.FeatureFilterArgs)
-            useFP = ff
+            self.FeatureProvider = ff
         
         if self.Setup.RunCNN:
             logging.warn("No support to run CNN through driver, yet")
@@ -90,17 +88,17 @@ class IMPLDriver(object):
 
         if self.Setup.RunSklSVM:
             logging.info("Running SciKit Learn Support Vector Machine classifier")
-            svm = SKLSVMClassifier(useFP)
+            svm = SKLSVMClassifier(self.FeatureProvider)
             self._runClassifier(svm, self.Setup.SklSVMArgs)
 
         if self.Setup.RunSVM:
             logging.info("Running Support Vector Machine classifier")
-            svm = SVMClassifier(useFP)
+            svm = SVMClassifier(self.FeatureProvider)
             self._runClassifier(svm, self.Setup.SVMArgs)
 
         if self.Setup.RunRF:
             logging.info("Running Random Forest classifier")
-            rf = RFClassifier(useFP)
+            rf = RFClassifier(self.FeatureProvider)
             self._runClassifier(rf, self.Setup.RFArgs)
 
 

@@ -37,7 +37,8 @@ class FeatureFilter:
         logging.debug("Variances shape: %s", str(variances.shape))
         logging.debug("Variances of features are: %s", str(variances))
         logging.debug("Mean of variances: %s", str(np.mean(variances)))
-        self._filter = variances[variances > np.mean(variances)]
+        variances = np.asarray(variances)[0]
+        self._filter = variances > np.mean(variances)
         
     def initMeanFilter(self, trainset, labels, useStdDev):
         logging.info("Splitting trainset into dog and cat sets")

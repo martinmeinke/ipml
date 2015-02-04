@@ -312,8 +312,8 @@ def main():
     filterFeaturesWith8000_2000.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.2000.gz")
     
                                
-    # params = itertools.product([10, 30, 60, 100, 110, 130, 150, 180], [1.1, 1.3, 1.5, 1.7, 2.0, 2.3, 2.5, 2.7, 3.0])
-    params = [[10, 1.1], [30, 1.1], [110, 2.0], [150, 1.1], [180, 1.1]]
+    params = itertools.product([10, 30, 60, 100, 110, 130, 150, 180], [1.1, 1.3, 1.5, 1.7, 2.0])
+    # params = [[10, 1.1], [30, 1.1], [110, 2.0], [150, 1.1], [180, 1.1]]
     trainSVMConfs = []    
     for C, sigma in params:
         conf = copy.copy(filterFeaturesWith8000_2000)

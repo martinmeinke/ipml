@@ -1,3 +1,4 @@
+import sys
 import os
 import logging
 import copy
@@ -76,8 +77,8 @@ class IMPLDriver(object):
         
         if self.Setup.RunFeatureFilter:
             ff = FeatureFilter(self.FeatureProvider, self.Setup.DogLabel, self.Setup.CatLabel)
-            ff.initFilter()
-            ff.applyFilter(**self.Setup.FeatureFilterArgs)
+            ff.initFilter(**self.Setup.FeatureFilterArgs)
+            ff.applyFilter()
             self.FeatureProvider = ff
         
         if self.Setup.RunCNN:
@@ -199,6 +200,9 @@ def main():
     loadSVMandValidate.RunSVM = True
     loadSVMandValidate.LoadTraining = True
     loadSVMandValidate.SaveTraining = False
+#    loadSVMandValidate.RunFeatureFilter = True
+#    loadSVMandValidate.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.2000.gz")
+#    loadSVMandValidate.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.2000.gz")
 
     # create and save a data segmentation
     segmentDataAndSaveSegmentation = IMPLRunConfiguration()
@@ -303,22 +307,19 @@ def main():
     filterFeaturesWith8000_2000.CreateDataSetPartitioning = False
     filterFeaturesWith8000_2000.ExtractFeatures = False
     filterFeaturesWith8000_2000.RunFeatureFilter = True
+    filterFeaturesWith8000_2000.FeatureFilterArgs = dict(filterName="variance")
     filterFeaturesWith8000_2000.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.2000.gz")
     filterFeaturesWith8000_2000.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.2000.gz")
     
                                
-    svmArgs = [
-        dict(C=30, maxIter=10, kTup=('rbf', 1.5)),
-    ]
-
     # params = itertools.product([10, 30, 60, 100, 110, 130, 150, 180], [1.1, 1.3, 1.5, 1.7, 2.0, 2.3, 2.5, 2.7, 3.0])
-    params = itertools.product([30, 60, 100, 150], [1.1, 1.3, 1.5, 1.7, 2.0])
+    params = [[10, 1.1], [30, 1.1], [110, 2.0], [150, 1.1], [180, 1.1]]
     trainSVMConfs = []    
     for C, sigma in params:
         conf = copy.copy(filterFeaturesWith8000_2000)
         conf.DataProviderMax = 6000
         conf.RunSVM = True
-        conf.SaveTraining = True
+        conf.SaveTraining = False
         conf.SVMArgs = dict(C=C, maxIter=10, kTup=('rbf', sigma))
         conf.Name = "Run with C=%d and sigma=%0.2f" % (C, sigma)
         trainSVMConfs.append(conf)
@@ -360,4 +361,6 @@ def main():
 
     
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == '-d':
+        DEBUG = True
     main()

@@ -6,9 +6,12 @@ from FeatureProvider import FeatureProvider
 from DataProvider import DataProvider
 
 from FeatureExtraction.FeatureClass import FeatureExtractor
+from FeatureExtraction.FeatureFilter import FeatureFilter
 from svm.SVMClassifier import SVMClassifier
 from svm.SKLSVMClassifier import SKLSVMClassifier
 from rf.RFClassifier import RFClassifier
+
+DEBUG = True
 
 class IMPLRunConfiguration(object):
     PROJECT_BASEDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../")
@@ -46,6 +49,9 @@ class IMPLRunConfiguration(object):
         self.LoadTraining = False # should we train the classifier or load the training?
         self.SaveTraining = False # save the training data?
         self.TestValidationSet = True # run a test against the validation set?
+        
+        self.RunFeatureFilter = False
+        self.FeatureFilterArgs = {}
 
 
 class IMPLDriver(object):
@@ -54,12 +60,20 @@ class IMPLDriver(object):
         self.FeatureProvider = None
         self.FeatureExtractor = None
         self.DataProvider = None
-        LoggingSetup().setup()
+        LoggingSetup().setup(DEBUG)
     
     def run(self, setup):
         self.Setup = setup
         self._initDataProvider()
         self._initFeatureProvider()
+        
+        useFP = self.FeatureProvider
+        
+        if self.Setup.RunFeatureFilter:
+            ff = FeatureFilter(self.FeatureProvider, self.Setup.DogLabel, self.Setup.CatLabel)
+            ff.initFilter()
+            ff.applyFilter(**self.Setup.Feature)
+            useFP = ff
         
         if self.Setup.RunCNN:
             logging.warn("No support to run CNN through driver, yet")
@@ -69,25 +83,21 @@ class IMPLDriver(object):
 
         if self.Setup.RunSklSVM:
             logging.info("Running SciKit Learn Support Vector Machine classifier")
-            svm = SKLSVMClassifier(self.FeatureProvider)
+            svm = SKLSVMClassifier(useFP)
             self._runClassifier(svm, self.Setup.SklSVMArgs)
 
         if self.Setup.RunSVM:
             logging.info("Running Support Vector Machine classifier")
-            svm = SVMClassifier(self.FeatureProvider)
+            svm = SVMClassifier(useFP)
             self._runClassifier(svm, self.Setup.SVMArgs)
 
         if self.Setup.RunRF:
             logging.info("Running Random Forest classifier")
-            rf = RFClassifier(self.FeatureProvider)
+            rf = RFClassifier(useFP)
             self._runClassifier(rf, self.Setup.RFArgs)
 
 
     def _initFeatureProvider(self):
-        # check if init is necessary
-        if not self.Setup.RunSVM and not self.Setup.RunRF and not self.Setup.ExtractFeatures and not self.Setup.RunSklSVM:
-            logging.info("Not initializing a feature provider - SVM and RF won't run")
-            return
         if self.FeatureProvider:
             logging.info("FeatureProvider already initialized")
             return
@@ -108,9 +118,6 @@ class IMPLDriver(object):
 
 
     def _initDataProvider(self):
-        if not self.Setup.RunSVM and not self.Setup.RunRF and not self.Setup.ExtractFeatures and not self.Setup.CreateDataSetPartitioning and not self.Setup.RunSklSVM:
-            logging.info("Not initializing a feature provider - SVM, RF, and FeatureExtraction won't run")
-            return
         if self.DataProvider:
             logging.info("DataProvider already initialized")
             return
@@ -214,12 +221,12 @@ def main():
     # generate some real and useful features
     generateAndSaveFeatures = IMPLRunConfiguration()
     generateAndSaveFeatures.CreateDataSetPartitioning = True
-    generateAndSaveFeatures.DataProviderMax = -1
+    generateAndSaveFeatures.DataProviderMax = 8000
     generateAndSaveFeatures.SaveDataSetPartitioning = True
     generateAndSaveFeatures.ExtractFeatures = True
     generateAndSaveFeatures.SaveExtractedFeatures = True
     generateAndSaveFeatures.FeatureExtractionArgs = {
-        'num_features' : 1000,
+        'num_features' : 2000,
         'max_texel_pics' : 5000
     }
 
@@ -238,7 +245,6 @@ def main():
     runSVMWithAll_1000.ExtractFeatures = False
     runSVMWithAll_1000.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.all.1000.gz")
     runSVMWithAll_1000.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.all.1000.gz")
-    
     
     # this configuration doesn't extract features, but only runs the RF with training and validation test
     trainRFandValidate = IMPLRunConfiguration()
@@ -272,6 +278,14 @@ def main():
     sklVsOwnSVM.DataProviderMax = 1000
     sklVsOwnSVM.RunSVM = True
     #sklVsOwnSVM.RunSklSVM = True
+    
+    filterFeaturesWith8000_2000 = IMPLRunConfiguration()
+    filterFeaturesWith8000_2000.SaveTraining = False
+    filterFeaturesWith8000_2000.CreateDataSetPartitioning = False
+    filterFeaturesWith8000_2000.ExtractFeatures = False
+    filterFeaturesWith8000_2000.RunFeatureFilter = True
+    filterFeaturesWith8000_2000.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.2000.gz")
+    filterFeaturesWith8000_2000.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.2000.gz")
     
                                
     svmArgs = [
@@ -314,7 +328,7 @@ def main():
         conf.DataProviderMax = 1000
         conf.RFArgs = args
         trainRFConfs.append(conf)
-    runDriver(*trainRFConfs)
+    runDriver(filterFeaturesWith8000_2000)
 
 
 

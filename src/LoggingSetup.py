@@ -12,12 +12,13 @@ class LoggingSetup():
     def __init__(self):
         self.logpath = ""
 
-    def setup(self):
+    def setup(self, debug = False):
         """
         Set up global logging. Can then simply be used by 'import logging; logging.info("test info")'
         """
         self.logpath = self._prepareLogFile();
-        logging.basicConfig(filename=self.logpath, format='[%(levelname)s|%(asctime)s] %(message)s', level=logging.DEBUG, filemode='w')
+        level = logging.DEBUG if debug else logging.INFO 
+        logging.basicConfig(filename=self.logpath, format='[%(levelname)s|%(asctime)s] %(message)s', level=level, filemode='w')
 
 
     def _prepareLogFile(self):

@@ -1,0 +1,24 @@
+Run with C=10 and sigma=1.10 : 
+Train: Support Vector Machine Error Rate = 0.34619047619
+Validation: Support Vector Machine Error Rate = 0.41
+Test: Support Vector Machine Error Rate = 0.413333333333
+Run with C=10 and sigma=1.30 : 
+Train: Support Vector Machine Error Rate = 0.416428571429
+Validation: Support Vector Machine Error Rate = 0.462222222222
+Test: Support Vector Machine Error Rate = 0.458888888889
+Run with C=10 and sigma=1.50 : 
+Train: Support Vector Machine Error Rate = 0.474523809524
+Validation: Support Vector Machine Error Rate = 0.46
+Test: Support Vector Machine Error Rate = 0.484444444444
+Run with C=30 and sigma=1.10 : 
+Train: Support Vector Machine Error Rate = 0.36380952381
+Validation: Support Vector Machine Error Rate = 0.418888888889
+Test: Support Vector Machine Error Rate = 0.423333333333
+Run with C=30 and sigma=1.30 : 
+Train: Support Vector Machine Error Rate = 0.419523809524
+Validation: Support Vector Machine Error Rate = 0.466666666667
+Test: Support Vector Machine Error Rate = 0.458888888889
+Run with C=30 and sigma=1.50 : 
+Train: Support Vector Machine Error Rate = 0.173333333333
+Validation: Support Vector Machine Error Rate = 0.306666666667
+Test: Support Vector Machine Error Rate = 0.31

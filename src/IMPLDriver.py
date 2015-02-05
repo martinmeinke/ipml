@@ -68,6 +68,7 @@ class IMPLDriver(object):
         self.FeatureProvider = None
         self.FeatureExtractor = None
         self.DataProvider = None
+        self.FilteredData = None
         LoggingSetup().setup(DEBUG)
     
     def run(self, setup):
@@ -79,7 +80,9 @@ class IMPLDriver(object):
             ff = FeatureFilter(self.FeatureProvider, self.Setup.DogLabel, self.Setup.CatLabel)
             ff.initFilter(**self.Setup.FeatureFilterArgs)
             ff.applyFilter()
-            self.FeatureProvider = ff
+            self.FilteredData = ff
+        else:
+            self.FilteredData = self.FeatureProvider
         
         if self.Setup.RunCNN:
             logging.warn("No support to run CNN through driver, yet")
@@ -89,17 +92,17 @@ class IMPLDriver(object):
 
         if self.Setup.RunSklSVM:
             logging.info("Running SciKit Learn Support Vector Machine classifier")
-            svm = SKLSVMClassifier(self.FeatureProvider)
+            svm = SKLSVMClassifier(self.FilteredData)
             self._runClassifier(svm, self.Setup.SklSVMArgs)
 
         if self.Setup.RunSVM:
             logging.info("Running Support Vector Machine classifier")
-            svm = SVMClassifier(self.FeatureProvider)
+            svm = SVMClassifier(self.FilteredData)
             self._runClassifier(svm, self.Setup.SVMArgs)
 
         if self.Setup.RunRF:
             logging.info("Running Random Forest classifier")
-            rf = RFClassifier(self.FeatureProvider)
+            rf = RFClassifier(self.FilteredData)
             self._runClassifier(rf, self.Setup.RFArgs)
 
 
@@ -152,8 +155,6 @@ class IMPLDriver(object):
             classifier.train(**classifierKwargs)
             tm.tick()
             logging.info("Training took %d:%0.2f minutes", int(tm.actual_tick/60), tm.actual_tick%60)
-            logging.info("Computing training error")
-            self._runClassifierOnSet(classifier, "Training", self.FeatureProvider.TrainData, self.FeatureProvider.TrainLabels)
 
         if self.Setup.SaveTraining:
             logging.info("Saving training of classifier %s to file", classifier.Name)
@@ -161,9 +162,9 @@ class IMPLDriver(object):
             
         if self.Setup.TestValidationSet:
             logging.info("Testing the validation set with classifier %s", classifier.Name)
-            self._runClassifierOnSet(classifier, "Train", self.FeatureProvider.TrainData, self.FeatureProvider.TrainLabels)
-            self._runClassifierOnSet(classifier, "Validation", self.FeatureProvider.ValidationData, self.FeatureProvider.ValidationLabels)
-            self._runClassifierOnSet(classifier, "Test", self.FeatureProvider.TestData, self.FeatureProvider.TestLabels)
+            self._runClassifierOnSet(classifier, "Train", self.FilteredData.TrainData, self.FilteredData.TrainLabels)
+            self._runClassifierOnSet(classifier, "Validation", self.FilteredData.ValidationData, self.FilteredData.ValidationLabels)
+            self._runClassifierOnSet(classifier, "Test", self.FilteredData.TestData, self.FilteredData.TestLabels)
 
     def _runClassifierOnSet(self, classifier, runname, data, labels):
         errorRate = classifier.testDataSet(data, labels)
@@ -307,18 +308,20 @@ def main():
     filterFeaturesWith8000_2000.CreateDataSetPartitioning = False
     filterFeaturesWith8000_2000.ExtractFeatures = False
     filterFeaturesWith8000_2000.RunFeatureFilter = True
-    filterFeaturesWith8000_2000.FeatureFilterArgs = dict(filterName="variance")
+    filterFeaturesWith8000_2000.FeatureFilterArgs = dict(filterName="mean")
     filterFeaturesWith8000_2000.DataSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/data_segmentation.8000.2000.gz")
     filterFeaturesWith8000_2000.FeatureSavePath = os.path.join(IMPLRunConfiguration.PROJECT_BASEDIR, "saved/extracted_features.8000.2000.gz")
     
                                
-    params = itertools.product([10, 30, 60, 100, 110, 130, 150, 180], [1.1, 1.3, 1.5, 1.7, 2.0])
+    # params = itertools.product([10, 30, 60, 100], [1.1, 1.3, 1.5])
+    params = itertools.product([100, 150], [1.1, 1.3, 1.5])
     # params = [[10, 1.1], [30, 1.1], [110, 2.0], [150, 1.1], [180, 1.1]]
     trainSVMConfs = []    
     for C, sigma in params:
         conf = copy.copy(filterFeaturesWith8000_2000)
         conf.DataProviderMax = 6000
         conf.RunSVM = True
+        conf.RunFeatureFilter = True
         conf.SaveTraining = False
         conf.SVMArgs = dict(C=C, maxIter=10, kTup=('rbf', sigma))
         conf.Name = "Run with C=%d and sigma=%0.2f" % (C, sigma)

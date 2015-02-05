@@ -44,5 +44,4 @@ class LoggingSetup():
             return # nothing to do if not already existing
         self._cascadeFileIfExists(basepath, level + 1)
         cascaded = createPath(level + 1)
-        # copy, don't move. we clear the file when opening. as a result we can watch logs without closing the reading application
-        shutil.copy(filename, cascaded)
+        shutil.move(filename, cascaded)

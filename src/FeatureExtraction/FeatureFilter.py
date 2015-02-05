@@ -40,7 +40,7 @@ class FeatureFilter:
         variances = np.asarray(variances)[0]
         self._filter = variances > np.mean(variances)
         
-    def initMeanFilter(self, trainset, labels, useStdDev):
+    def initMeanFilter(self, trainset, labels, useStdDev = False):
         logging.info("Splitting trainset into dog and cat sets")
         cats = trainset[labels == self._catlabel, :]
         dogs = trainset[labels == self._doglabel, :]
